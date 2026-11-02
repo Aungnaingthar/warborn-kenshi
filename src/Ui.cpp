@@ -243,7 +243,7 @@ static void buildBody()
         case TAB_PEOPLE: t = wbFollowersSummary() + "\n" + wbOriginSummary(); break;
         default: t = "YOUR STANDING (how each faction sees you)\n" + wbReputationSummary()
                    + "\nEarn respect by felling a faction's enemies, fighting in their wars and finishing their contracts.\n"
-                   + "Good standing makes their people willing to join you (select one, press the recruit key)."; break;
+                   + "Good standing makes their people willing to join you (point at one, press Alt+R)."; break;
     }
     std::string wrapped = wrap(t, 110);
     int offers = wbContractsOfferCount();

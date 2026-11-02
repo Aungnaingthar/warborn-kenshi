@@ -105,7 +105,7 @@ void wbWarbandAdd(Character* c)
 static void toggleMember()
 {
     Character* c = selectedOwn();
-    if (!c) { wbToast("Select one of your people, then press the warband key."); return; }
+    if (!c) { wbToast("Select one of your people, then press Alt+B."); return; }
     std::string name = c->getName();
     for (size_t i = 0; i < s_band.size(); ++i)
         if (s_band[i] == c)
@@ -164,7 +164,7 @@ static int orderFight(float range)
 static void startTake()
 {
     Character* lead = selectedOwn();
-    if (s_band.empty()) { wbToast("Your warband is empty. Select people and press B to add them."); return; }
+    if (s_band.empty()) { wbToast("Your warband is empty. Select people and press Alt+B to add them."); return; }
     Ogre::Vector3 from = lead ? lead->getPosition() : s_band[0]->getPosition();
     Faction* owner = NULL;
     TownBase* t = nearestEnemyTown(from, &owner);
@@ -180,7 +180,7 @@ static void startTake()
 static void startPatrol()
 {
     Character* lead = selectedOwn();
-    if (s_band.empty()) { wbToast("Your warband is empty. Select people and press B to add them."); return; }
+    if (s_band.empty()) { wbToast("Your warband is empty. Select people and press Alt+B to add them."); return; }
     s_mission = MISSION_PATROL;
     s_patrolCentre = lead ? lead->getPosition() : s_band[0]->getPosition();
     s_patrolLeg = 0; s_nextThink = 0.0;
@@ -293,7 +293,7 @@ std::string wbWarbandSummary()
     out += "\n";
     if (s_mission == MISSION_TAKE)        out += "  Mission: take " + s_targetName + "\n";
     else if (s_mission == MISSION_PATROL) out += "  Mission: patrolling\n";
-    else                                  out += "  Mission: none (B add/remove, U take a place, I patrol, O return)\n";
+    else                                  out += "  Mission: none (Alt+B add/remove, Alt+U take a place, Alt+P patrol, Alt+O return)\n";
     return out;
 }
 

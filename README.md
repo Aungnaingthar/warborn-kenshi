@@ -20,7 +20,7 @@ Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 | **Messengers** | News of rumours, wars, sieges and conquests pops up at the top of the screen and is kept in the journal. |
 | **Reputation** | Felling a faction's enemies earns their respect ("the enemy of my enemy"). Fighting at a besieged town helps decide the battle and earns gratitude from the side you helped. |
 | **Contracts** | Hunts, defending towns and joining assaults, offered by factions that know you. Rewards in reputation. |
-| **Recruiting** | Select anyone and press **Y**. Your standing with their faction decides whether they join. |
+| **Recruiting** | Point at anyone and press **Alt+R**. Your standing with their faction decides whether they join. |
 | **Commands** | **F5** follow me, **F6** hold position, **F7** charge, **F8** focus the nearest enemy. |
 | **Realistic combat** | A speed cap for everyone, with skill turned into precision (skill gap and armour exposure scale damage). |
 | **Fair battles** | No more 10-on-1 dogpiles: at most 2 attackers per target, and the rest spread out over the enemy line. |
@@ -30,36 +30,35 @@ Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 | **Territory map** | Journal Map tab: every town in its owner's colour, sieges marked, each power's wars and pacts. |
 | **Saved with your game** | News, renown, pacts, grudges, contracts and your warband are stored per save. |
 | **Original dialogue** | Many varied lines for rumours, war news, conquests, pacts and recruit answers. |
-| **Training** | **T**: two of your people spar 1 vs 1 (blunted blows, real bruises and knock-downs) and learn faster. **Shift+T**: a knockout tournament, the champion gains fame. |
+| **Training** | **Alt+T**: two of your people spar 1 vs 1 (blunted blows, real bruises and knock-downs) and learn faster. **Shift+Alt+T**: a knockout tournament, the champion gains fame. |
 | **Start options** | Journal **People** tab: choose Noble, Merchant, Warrior, Exile or Slave-born once per game, each with its own money, standing, fame and loyalty effects. |
-| **Talk to anyone** | **H** on the selected person: greetings by how their faction sees you, rumours, what they think of your fame, work. Your own people tell you how they feel. |
+| **Talk to anyone** | **Alt+H** on the person under the mouse: greetings by how their faction sees you, rumours, what they think of your fame, work. Your own people tell you how they feel. |
 | **Traits, bond, loyalty, betrayal** | Each follower has a trait, a bond with you, an origin and an age. People of your own land stay loyal; low loyalty can mean theft, desertion or escape, depending on the trait. |
-| **Two kinds of recruits** | **Y** joins your squad (you control them). **Shift+Y** joins your warband (you only command them). |
-| **Prisoners who work** | **Y** on a knocked-out person takes them prisoner. They work like anyone else but try to escape until they trust you, then they stay for good. |
+| **Two kinds of recruits** | **Alt+R** joins your squad (you control them). **Shift+Alt+R** joins your warband (you only command them). |
+| **Prisoners who work** | **Alt+R** on a knocked-out person takes them prisoner. They work like anyone else but try to escape until they trust you, then they stay for good. |
 | **Trade** | Contracts pay cats. Caravan contracts: invest now, get your share back with profit if their towns stay safe. |
-| **Age and marriage** | Everyone ages; old fighters weaken and can die of old age. **M** marries two of your people (more loyal together; they grieve if one dies). |
+| **Age and marriage** | Everyone ages; old fighters weaken and can die of old age. **Alt+M** marries two of your people (more loyal together; they grieve if one dies). |
 | **Easier smithing** | Smithing skills learn 3× faster (adjustable). |
 | **Rank and vassals** | Your power grows with towns and fame: Wandering Band, Free Company, Lordship, Realm, Kingdom. From Lordship on, small friendly factions may swear fealty, pay tribute and call for help, and they rebel if they stop liking you. |
 
 ## Controls
 
+Every Warborn key uses **Alt**, so nothing clashes with Kenshi's own hotkeys (they're switched off while Alt is held). Talk and recruit act on the person **under your mouse cursor**.
+
 | Key | Action |
 |---|---|
-| `J` | Journal: News, Wars, Contracts (with Accept buttons), Reputation, Map, People (with Origin buttons) |
-| `Y` | Recruit the selected person |
-| `F5` | Your people near your selected character: follow me |
-| `F6` | Hold position |
-| `F7` | Charge (each attacks the enemy nearest to them) |
-| `F8` | Focus (everyone attacks the enemy nearest your selected character) |
-| `B` | Add / remove the selected person to / from your warband |
-| `U` | Warband: take the nearest enemy town or camp |
-| `I` | Warband: patrol around your selected character |
-| `O` | Warband: return to your selected character |
-| `T` | Spar: the selected fighter trains 1 vs 1 with the nearest squadmate |
-| `Shift+T` | Tournament among your nearby fighters |
-| `H` | Talk to the selected person (press again for the next topic) |
-| `M` | Marry the selected person to the nearest unmarried one of your people |
-| `Shift+Y` | Recruit into the warband instead of the squad |
+| `Alt+J` | Journal: News, Wars, Contracts (with Accept buttons), Reputation, Map, People (with Origin buttons) |
+| `Alt+H` | Talk to the person under the mouse (press again for the next topic) |
+| `Alt+R` | Recruit the person under the mouse (a knocked-out one becomes a prisoner) |
+| `Shift+Alt+R` | Recruit into the warband instead of the squad |
+| `Alt+B` | Add / remove the selected member of your squad to / from your warband |
+| `Alt+U` | Warband: take the nearest enemy town or camp |
+| `Alt+P` | Warband: patrol around your selected character |
+| `Alt+O` | Warband: return to your selected character |
+| `Alt+T` | Spar: the selected fighter trains 1 vs 1 with the nearest squadmate |
+| `Shift+Alt+T` | Tournament among your nearby fighters |
+| `Alt+M` | Marry the selected person to the nearest unmarried one of your people |
+| `F5` / `F6` / `F7` / `F8` | Your people near your selected character: follow / hold / charge / focus |
 
 Every key and number is in `Warborn.ini`.
 

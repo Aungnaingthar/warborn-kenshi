@@ -12,6 +12,7 @@
 #include <kenshi/Town.h>
 #include <kenshi/FactionWarMgr.h>
 #include <kenshi/gui/ForgottenGUI.h>
+#include <kenshi/InputHandler.h>
 #include <kenshi/CameraClass.h>
 #include <kenshi/Damages.h>
 #include <kenshi/combat/CombatClass.h>
@@ -94,20 +95,34 @@ static bool iniB(const char* path, const char* key, bool d)
     return d;
 }
 // Key names: a letter or digit ("J"), F1..F24, or TAB / SPACE / HOME / END / INSERT / DELETE.
+// Key names: "ALT+R", "CTRL+F9", "SHIFT+K" or a plain key. Keys: a letter or
+// digit, F1..F24, TAB / SPACE / HOME / END / INSERT / DELETE.
+// Encoded as vk | 0x100 (Alt) | 0x200 (Ctrl) | 0x400 (Shift).
+static const int WBKEY_ALT = 0x100, WBKEY_CTRL = 0x200, WBKEY_SHIFT = 0x400;
 static int keyFromName(const char* s)
 {
-    char k[16]; int n = 0;
-    for (const char* p = s; *p && n < 15; ++p) if (!isspace((unsigned char)*p)) k[n++] = (char)toupper((unsigned char)*p);
+    char k[32]; int n = 0;
+    for (const char* p = s; *p && n < 31; ++p) if (!isspace((unsigned char)*p)) k[n++] = (char)toupper((unsigned char)*p);
     k[n] = 0;
-    if (n == 1 && (isalpha((unsigned char)k[0]) || isdigit((unsigned char)k[0]))) return k[0];
-    if (k[0] == 'F' && n >= 2 && n <= 3) { int f = atoi(k + 1); if (f >= 1 && f <= 24) return VK_F1 + f - 1; }
-    if (!strcmp(k, "TAB"))    return VK_TAB;
-    if (!strcmp(k, "SPACE"))  return VK_SPACE;
-    if (!strcmp(k, "HOME"))   return VK_HOME;
-    if (!strcmp(k, "END"))    return VK_END;
-    if (!strcmp(k, "INSERT")) return VK_INSERT;
-    if (!strcmp(k, "DELETE")) return VK_DELETE;
-    return 0;
+    int mods = 0;
+    char* key = k;
+    for (;;)
+    {
+        if (!strncmp(key, "ALT+", 4))   { mods |= WBKEY_ALT;   key += 4; continue; }
+        if (!strncmp(key, "CTRL+", 5))  { mods |= WBKEY_CTRL;  key += 5; continue; }
+        if (!strncmp(key, "SHIFT+", 6)) { mods |= WBKEY_SHIFT; key += 6; continue; }
+        break;
+    }
+    int len = (int)strlen(key), vk = 0;
+    if (len == 1 && (isalpha((unsigned char)key[0]) || isdigit((unsigned char)key[0]))) vk = key[0];
+    else if (key[0] == 'F' && len >= 2 && len <= 3) { int f = atoi(key + 1); if (f >= 1 && f <= 24) vk = VK_F1 + f - 1; }
+    else if (!strcmp(key, "TAB"))    vk = VK_TAB;
+    else if (!strcmp(key, "SPACE"))  vk = VK_SPACE;
+    else if (!strcmp(key, "HOME"))   vk = VK_HOME;
+    else if (!strcmp(key, "END"))    vk = VK_END;
+    else if (!strcmp(key, "INSERT")) vk = VK_INSERT;
+    else if (!strcmp(key, "DELETE")) vk = VK_DELETE;
+    return vk ? (vk | mods) : 0;
 }
 static int iniKey(const char* path, const char* key, const char* d)
 {
@@ -131,22 +146,22 @@ void wbLoadConfig(const char* path)
     g_wb.repPerFelled      = iniF(path, "RepPerFelled",      0.6f);
     g_wb.repCapPerFaction  = iniF(path, "RepCapPerFaction",  8.0f);
     g_wb.repWarHelp        = iniF(path, "RepWarHelp",        12.0f);
-    g_wb.recruitKey        = iniKey(path, "RecruitKey",      "Y");
+    g_wb.recruitKey        = iniKey(path, "RecruitKey",      "ALT+R");
     g_wb.recruitBase       = iniF(path, "RecruitBase",       0.25f);
     g_wb.cmdKeys[0]        = iniKey(path, "CmdFollowKey",    "F5");
     g_wb.cmdKeys[1]        = iniKey(path, "CmdHoldKey",      "F6");
     g_wb.cmdKeys[2]        = iniKey(path, "CmdChargeKey",    "F7");
     g_wb.cmdKeys[3]        = iniKey(path, "CmdFocusKey",     "F8");
     g_wb.cmdRange          = iniF(path, "CommandRange",      150.0f);
-    g_wb.journalKey        = iniKey(path, "JournalKey",      "J");
-    g_wb.warbandKeys[0]    = iniKey(path, "WarbandAddKey",    "B");
-    g_wb.warbandKeys[1]    = iniKey(path, "WarbandTakeKey",   "U");
-    g_wb.warbandKeys[2]    = iniKey(path, "WarbandPatrolKey", "I");
-    g_wb.warbandKeys[3]    = iniKey(path, "WarbandReturnKey", "O");
+    g_wb.journalKey        = iniKey(path, "JournalKey",      "ALT+J");
+    g_wb.warbandKeys[0]    = iniKey(path, "WarbandAddKey",    "ALT+B");
+    g_wb.warbandKeys[1]    = iniKey(path, "WarbandTakeKey",   "ALT+U");
+    g_wb.warbandKeys[2]    = iniKey(path, "WarbandPatrolKey", "ALT+P");
+    g_wb.warbandKeys[3]    = iniKey(path, "WarbandReturnKey", "ALT+O");
     g_wb.playerConquest    = iniB(path, "PlayerConquest",    true);
-    g_wb.trainKey          = iniKey(path, "TrainKey",        "T");
-    g_wb.talkKey           = iniKey(path, "TalkKey",         "H");
-    g_wb.marryKey          = iniKey(path, "MarryKey",        "M");
+    g_wb.trainKey          = iniKey(path, "TrainKey",        "ALT+T");
+    g_wb.talkKey           = iniKey(path, "TalkKey",         "ALT+H");
+    g_wb.marryKey          = iniKey(path, "MarryKey",        "ALT+M");
     g_wb.yearMinutes       = iniF(path, "YearMinutes",       60.0f);
     g_wb.oldAgeDeath       = iniB(path, "OldAgeDeath",       true);
     g_wb.betrayal          = iniB(path, "Betrayal",          true);
@@ -181,13 +196,25 @@ static bool kenshiForeground()
     return pid == GetCurrentProcessId();
 }
 static bool s_keyPrev[256];
-static bool keyPressed(int vk)
+static bool s_keyNow[256];
+// Pressed this frame: the key went down, with exactly the Alt/Ctrl it was
+// bound with (Shift only checked when the binding asks for it - Shift+key
+// variants such as the tournament are read separately).
+static bool keyPressed(int code)
 {
+    int vk = code & 0xFF;
     if (vk <= 0 || vk > 255) return false;
-    bool down = (GetAsyncKeyState(vk) & 0x8000) != 0;
-    bool edge = down && !s_keyPrev[vk];
-    s_keyPrev[vk] = down;
-    return edge;
+    if (!(s_keyNow[vk] && !s_keyPrev[vk])) return false;
+    bool alt = s_keyNow[VK_MENU], ctrl = s_keyNow[VK_CONTROL], shift = s_keyNow[VK_SHIFT];
+    if (((code & WBKEY_ALT) != 0) != alt) return false;
+    if (((code & WBKEY_CTRL) != 0) != ctrl) return false;
+    if ((code & WBKEY_SHIFT) && !shift) return false;
+    return true;
+}
+static void snapshotKeys()
+{
+    memcpy(s_keyPrev, s_keyNow, sizeof(s_keyNow));
+    for (int vk = 1; vk < 256; ++vk) s_keyNow[vk] = (GetAsyncKeyState(vk) & 0x8000) != 0;
 }
 // read by People.cpp
 bool g_wbRecruitPressed = false;
@@ -199,12 +226,13 @@ static volatile bool s_journalTogglePending = false;
 
 static void pollKeys()
 {
+    snapshotKeys();
     bool fg = kenshiForeground();
     bool textInput = gui && gui->inDialogue();
     g_wbRecruitPressed = keyPressed(g_wb.recruitKey) && fg && !textInput;
     for (int i = 0; i < 4; ++i) g_wbCmdPressed[i] = keyPressed(g_wb.cmdKeys[i]) && fg;
     for (int i = 0; i < 4; ++i) g_wbWarbandKeys[i] = keyPressed(g_wb.warbandKeys[i]) && fg && !textInput;
-    bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    bool shift = s_keyNow[VK_SHIFT];
     bool train = keyPressed(g_wb.trainKey) && fg && !textInput;
     g_wbTrainPressed = train && !shift;
     g_wbRecruitShift = shift;
@@ -272,6 +300,15 @@ static void mainLoop_hook(GameWorld* thisptr, float time)
     wbUiMainFrame();
 }
 
+// While Alt is held, Kenshi's own hotkeys are swallowed, so Alt+R / Alt+B /
+// Alt+M ... are Warborn's alone (and don't also open crafting, build, map...).
+static void (*s_processKeysOrig)(GameWorld*) = NULL;
+static void processKeys_hook(GameWorld* thisptr)
+{
+    if (key && (GetAsyncKeyState(VK_MENU) & 0x8000) && kenshiForeground()) key->events.clear();
+    s_processKeysOrig(thisptr);
+}
+
 // UI must be touched from the render/UI thread: the player camera update.
 static void (*s_cameraUpdateOrig)(CameraClass*, bool) = NULL;
 static void cameraUpdate_hook(CameraClass* thisptr, bool controlEnabled)
@@ -337,6 +374,7 @@ __declspec(dllexport) void startPlugin()
     srand((unsigned)GetTickCount());
     InitializeCriticalSection(&s_felledLock);
     memset(s_keyPrev, 0, sizeof(s_keyPrev));
+    memset(s_keyNow, 0, sizeof(s_keyNow));
 
     char path[MAX_PATH] = "";
     if (s_module && GetModuleFileNameA(s_module, path, MAX_PATH))
@@ -360,6 +398,13 @@ __declspec(dllexport) void startPlugin()
         ErrorLog("Warborn: mainLoop hook FAILED - mod inactive");
     else
         DebugLog("Warborn: mainLoop hook OK");
+
+    if (KenshiLib::SUCCESS != KenshiLib::AddHook(
+            KenshiLib::GetRealAddress(&GameWorld::processKeys),
+            (void*)&processKeys_hook, &s_processKeysOrig))
+        ErrorLog("Warborn: processKeys hook FAILED - Alt keys may also trigger Kenshi hotkeys");
+    else
+        DebugLog("Warborn: processKeys hook OK");
 
     if (KenshiLib::SUCCESS != KenshiLib::AddHook(
             KenshiLib::GetRealAddress(&CameraClass::update),

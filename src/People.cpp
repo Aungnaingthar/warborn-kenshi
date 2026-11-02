@@ -208,6 +208,8 @@ static Character* firstConsciousPlayerChar()
 Character* wbSelectedPerson()
 {
     if (!ou || !ou->player) return NULL;
+    Character* pointed = wbPersonUnderMouse(70.0f);     // whoever the cursor is on
+    if (pointed) return pointed;
     lektor<RootObject*> sel;
     ou->player->getAllSelectedObjects(sel, CHARACTER);
     Character* stranger = NULL;
@@ -235,7 +237,7 @@ static bool joinBand(Character* c, Character* leader)
 static void tryRecruit()
 {
     Character* c = wbSelectedPerson();
-    if (!c) { wbToast("Click a person to select them, then press the recruit key."); return; }
+    if (!c) { wbToast("Point at a person with the mouse, then press Alt+R."); return; }
     if (c->isPlayerCharacter()) { wbToast("They already ride with you."); return; }
     if (c->isDead()) { wbToast("The dead don't follow anyone."); return; }
     Faction* pf = wbPlayerFaction();

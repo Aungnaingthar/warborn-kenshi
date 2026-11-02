@@ -80,6 +80,7 @@ Faction*    wbPlayerFaction();
 // The person you clicked: a selected stranger first (Kenshi keeps clicked
 // NPCs in the selected-objects list), otherwise your selected squad member.
 Character*  wbSelectedPerson();
+Character*  wbPersonUnderMouse(float radiusPx);   // Pick.cpp
 std::string wbFactionName(Faction* f);
 std::string wbTownName(TownBase* t);
 int         wbTownCount(Faction* f);

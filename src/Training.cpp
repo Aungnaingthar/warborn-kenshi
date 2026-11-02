@@ -232,7 +232,7 @@ static void tournamentStep()
 static void startSpar()
 {
     Character* a = selectedOwn();
-    if (!a) { wbToast("Select one of your fighters, then press the training key."); return; }
+    if (!a) { wbToast("Select one of your fighters, then press Alt+T."); return; }
     for (size_t i = 0; i < s_bouts.size(); ++i)
         if (s_bouts[i].a == a || s_bouts[i].b == a) { endBout(i, NULL, "called off"); return; }
     if (!fit(a)) { wbToast("They are in no shape to train."); return; }
@@ -311,7 +311,7 @@ std::string wbTrainingSummary()
         char b[80]; sprintf_s(b, sizeof(b), "  Tournament: round %d\n", s_tRound);
         out += b;
     }
-    if (out.empty()) out = "  Nobody is training. (T spar, Shift+T tournament)\n";
+    if (out.empty()) out = "  Nobody is training. (Alt+T spar, Shift+Alt+T tournament)\n";
     return out;
 }
 

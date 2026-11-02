@@ -225,7 +225,7 @@ static void betray(Follower& f)
 static void marry()
 {
     Character* a = ou->player->selectedCharacter.getCharacter();
-    if (!a || !a->isPlayerCharacter()) { wbToast("Select one of your people, then press the marry key."); return; }
+    if (!a || !a->isPlayerCharacter()) { wbToast("Select one of your people, then press Alt+M."); return; }
     Follower* fa = find(a);
     if (!fa) return;
     if (!fa->partner.empty()) { wbToast((fa->name + " is already married to " + fa->partner + ".").c_str()); return; }
@@ -297,7 +297,7 @@ static std::string fillX(const char* s)
 static void talk()
 {
     Character* c = wbSelectedPerson();
-    if (!c) { wbToast("Click someone to select them, then press the talk key."); return; }
+    if (!c) { wbToast("Point at someone with the mouse, then press Alt+H."); return; }
     if (c->isDead()) { wbToast("The dead keep their secrets."); return; }
     if (c->isUnconcious()) { wbToast("They're out cold."); return; }
     if (c != s_talkWith) { s_talkWith = c; s_talkTopic = 0; }
@@ -351,9 +351,9 @@ static void talk()
             }
             default:
                 if (hostile) line = "\"We have nothing to say to each other.\"";
-                else if (wbContractsOfferCount() > 0) line = "\"There's work, if you want it. Ask around - check your journal (J).\"";
+                else if (wbContractsOfferCount() > 0) line = "\"There's work, if you want it. Check your journal (Alt+J).\"";
                 else line = "\"Nothing for you today. Come back later.\"";
-                if (!hostile && rel >= 15) line += " (They might join you: press Y.)";
+                if (!hostile && rel >= 15) line += " (They might join you: Alt+R.)";
                 break;
         }
     }
@@ -456,7 +456,7 @@ std::string wbFollowersSummary()
         out += b;
     }
     if (s_fol.empty()) out += "  (nobody yet)\n";
-    out += "  H talk to the selected person, M marry two of your people, Y recruit (Shift+Y: into the warband)\n";
+    out += "  Alt+H talk to the person under the cursor, Alt+M marry two of your people, Alt+R recruit (Shift+Alt+R: into the warband)\n";
     return out;
 }
 

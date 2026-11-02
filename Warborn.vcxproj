@@ -108,6 +108,7 @@
     <ClCompile Include="src\Training.cpp" />
     <ClCompile Include="src\Followers.cpp" />
     <ClCompile Include="src\Money.cpp" />
+    <ClCompile Include="src\Pick.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Warborn.h" />
