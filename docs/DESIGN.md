@@ -1,8 +1,37 @@
-# Warborn: Kenshi overhaul (design v0.2)
+# Warborn: total conversion for Kenshi (design v0.3)
 
-*Working name.* A KCD 2-style realism overhaul for Kenshi, built as an RE_Kenshi plugin on the open-source Direct Control mod (GPLv3, credited). Direct Control gives us WASD movement, the cameras and attack/block/dodge input. Everything below is new.
+*Working name.* Warborn turns Kenshi into **its own game**: an original world played on three levels at once. It's built as an RE_Kenshi plugin on the open-source Direct Control mod (GPLv3, credited) plus FCS data for the world.
 
-The **style is now Kingdom Come: Deliverance 2**, not Shadow of War: grounded, skill-heavy, deadly, armor matters.
+**The rule:** Warborn is inspired by the *feel* of grounded medieval RPGs (KCD 2-style realism) and Mount & Blade-style command. It **does not copy** any other game's characters, story, UI art or world. Everything in it is original.
+
+## The three layers
+
+| Layer | You are... | What you do |
+|---|---|---|
+| **1. Fighter** (direct control) | one character, in third person | Fight with the stance (lock-on, directional swings, block, dodge), with stamina, staggers and realistic speed |
+| **2. Commander** (squad) | the leader of a warband | Give live orders in battle: follow, hold, charge, attack my target, formations, retreat |
+| **3. Ruler** (strategy) | the head of your own faction | Run towns, economy, diplomacy and war on the world map; watch other factions expand, fight and fall |
+
+You can switch layers any time: fight in the line, give orders mid-battle, then open the strategy screens.
+
+## Status
+| Feature | State |
+|---|---|
+| Skill + armor damage, hit-stop, camera shake | ✅ Built |
+| Combat stance: lock-on, LMB attack / RMB block, directional swings | ✅ Built (testing: clicks not registering yet) |
+| Realistic swing/block speed cap | ✅ Built |
+| Staggers on strong hits, parry recoil | ✅ Built |
+| Squad commands F5 to F8 | ✅ Built |
+| Everything below | Planned |
+
+## Roadmap (big picture)
+1. **Fighter, finished:** stamina bar, combos, perks, ranged aiming, armor wear, weapon sharpening.
+2. **Commander:** formations (line, shield wall, wedge), retreat and regroup, squad morale (troops break and run when losing), a command wheel UI, sergeants who relay orders.
+3. **Life:** age and death, loyalty and betrayal, births, recruits who come and go, character backgrounds.
+4. **Ruler:** your own faction screen (towns, population, food, taxes, guards), job board for citizens, trade caravans, diplomacy (alliances, tribute, war, peace).
+5. **Living world:** factions war on each other, conquer towns, raid, send messengers with news; a news journal.
+6. **Original world (FCS data):** new factions, towns, characters, dialogue, quests and a main story, written by Claude and placed in FCS by you.
+7. **Art (needs artists):** new weapons, armor and props. You can learn Blender with Claude's help, or the project can bring in volunteer artists. Kenshi's own map stays (a new map is out of reach for now).
 
 ---
 
