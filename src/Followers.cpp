@@ -30,7 +30,6 @@
 #include <kenshi/Faction.h>
 #include <kenshi/FactionRelations.h>
 #include <kenshi/FactionWarMgr.h>
-#include <kenshi/Platoon.h>
 #include <kenshi/Enums.h>
 #include <kenshi/util/hand.h>
 #include <core/Functions.h>
@@ -195,14 +194,12 @@ static void yearPassed(Follower& f)
 // ------------------------------------------------------------ betrayal
 static void betray(Follower& f)
 {
-    Faction* pf = wbPlayerFaction();
-    Ownerships* purse = pf ? pf->factionOwnerships : NULL;
     Faction* home = f.origin.empty() ? NULL : wbFindFaction(f.origin);
     char b[260];
-    if ((f.trait == TR_GREEDY || f.trait == TR_AMBITIOUS) && purse && purse->getMoney() > 0)
+    if ((f.trait == TR_GREEDY || f.trait == TR_AMBITIOUS) && wbPlayerMoney() > 0)
     {
-        int take = purse->getMoney() / 7; if (take > 1500) take = 1500; if (take < 1) take = 1;
-        purse->takeMoneyByForce(take);
+        int take = wbPlayerMoney() / 7; if (take > 1500) take = 1500; if (take < 1) take = 1;
+        wbTakeMoneyByForce(take);
         sprintf_s(b, sizeof(b), "Betrayal! %s stole %d cats from the band's purse.", f.name.c_str(), take);
         wbNews(b);
         f.bond -= 10.0f;
@@ -371,7 +368,6 @@ void wbFollowersChooseOrigin(int which)
     Faction* pf = wbPlayerFaction();
     if (!pf || !ou || !ou->factionMgr) return;
     s_origin = which;
-    Ownerships* purse = pf->factionOwnerships;
     const lektor<Faction*>* all = ou->factionMgr->getAllFactions();
     // the two greatest powers
     Faction* top1 = NULL; Faction* top2 = NULL; int t1 = 0, t2 = 0;
@@ -386,14 +382,14 @@ void wbFollowersChooseOrigin(int which)
     switch (which)
     {
         case OR_NOBLE:
-            if (purse) purse->addMoney(2000);
+            wbPayPlayer(2000);
             wbAddRenown(20.0f, "noble birth");
             if (top1) wbGiveRep(top1, 15.0f, "for your noble name");
             if (top2) wbGiveRep(top2, 15.0f, "for your noble name");
             for (size_t i = 0; i < s_fol.size(); ++i) s_fol[i].bond += 10.0f;
             break;
         case OR_MERCHANT:
-            if (purse) purse->addMoney(5000);
+            wbPayPlayer(5000);
             for (uint32_t i = 0; all && i < all->size(); ++i)
             {
                 Faction* f = (*all)[i];

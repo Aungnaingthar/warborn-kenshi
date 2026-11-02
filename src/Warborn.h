@@ -193,6 +193,8 @@ std::string wbLatestNews();                           // newest news line, no ti
 // pay the player's purse (contracts, trade); false if they can't afford a cost
 void  wbPayPlayer(int cats);
 bool  wbChargePlayer(int cats);
+int   wbPlayerMoney();
+void  wbTakeMoneyByForce(int cats);
 
 // ------------------------------------------------------------ contracts
 void wbContractsFrame();

@@ -12,7 +12,6 @@
 #include <kenshi/Town.h>
 #include <kenshi/FactionWarMgr.h>
 #include <kenshi/gui/ForgottenGUI.h>
-#include <kenshi/Platoon.h>
 #include <kenshi/CameraClass.h>
 #include <kenshi/Damages.h>
 #include <kenshi/combat/CombatClass.h>
@@ -59,18 +58,6 @@ int wbTownCount(Faction* f)
     return (int)f->warMgr->myTowns.size();
 }
 float wbRand01() { return (float)rand() / (float)RAND_MAX; }
-void wbPayPlayer(int cats)
-{
-    Faction* pf = wbPlayerFaction();
-    if (pf && pf->factionOwnerships && cats > 0) pf->factionOwnerships->addMoney(cats);
-}
-bool wbChargePlayer(int cats)
-{
-    Faction* pf = wbPlayerFaction();
-    if (!pf || !pf->factionOwnerships || cats <= 0) return false;
-    if (pf->factionOwnerships->getMoney() < cats) return false;
-    return pf->factionOwnerships->takeMoney(cats);
-}
 Faction* wbFindFaction(const std::string& name)
 {
     if (!ou || !ou->factionMgr || name.empty()) return NULL;
