@@ -106,6 +106,7 @@
     <ClCompile Include="src\Persist.cpp" />
     <ClCompile Include="src\Warband.cpp" />
     <ClCompile Include="src\Training.cpp" />
+    <ClCompile Include="src\Followers.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Warborn.h" />

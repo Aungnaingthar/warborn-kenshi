@@ -12,6 +12,7 @@
 #include <kenshi/Town.h>
 #include <kenshi/FactionWarMgr.h>
 #include <kenshi/gui/ForgottenGUI.h>
+#include <kenshi/Platoon.h>
 #include <kenshi/CameraClass.h>
 #include <kenshi/Damages.h>
 #include <kenshi/combat/CombatClass.h>
@@ -58,6 +59,18 @@ int wbTownCount(Faction* f)
     return (int)f->warMgr->myTowns.size();
 }
 float wbRand01() { return (float)rand() / (float)RAND_MAX; }
+void wbPayPlayer(int cats)
+{
+    Faction* pf = wbPlayerFaction();
+    if (pf && pf->factionOwnerships && cats > 0) pf->factionOwnerships->addMoney(cats);
+}
+bool wbChargePlayer(int cats)
+{
+    Faction* pf = wbPlayerFaction();
+    if (!pf || !pf->factionOwnerships || cats <= 0) return false;
+    if (pf->factionOwnerships->getMoney() < cats) return false;
+    return pf->factionOwnerships->takeMoney(cats);
+}
 Faction* wbFindFaction(const std::string& name)
 {
     if (!ou || !ou->factionMgr || name.empty()) return NULL;
@@ -145,6 +158,16 @@ void wbLoadConfig(const char* path)
     g_wb.warbandKeys[3]    = iniKey(path, "WarbandReturnKey", "O");
     g_wb.playerConquest    = iniB(path, "PlayerConquest",    true);
     g_wb.trainKey          = iniKey(path, "TrainKey",        "T");
+    g_wb.talkKey           = iniKey(path, "TalkKey",         "H");
+    g_wb.marryKey          = iniKey(path, "MarryKey",        "M");
+    g_wb.yearMinutes       = iniF(path, "YearMinutes",       60.0f);
+    g_wb.oldAgeDeath       = iniB(path, "OldAgeDeath",       true);
+    g_wb.betrayal          = iniB(path, "Betrayal",          true);
+    g_wb.betrayalRate      = iniF(path, "BetrayalRate",      1.0f);
+    g_wb.betrayalDesert    = iniB(path, "BetrayalDesert",    true);
+    g_wb.smithingXpMult    = iniF(path, "SmithingXpMult",    3.0f);
+    g_wb.learnMult         = iniF(path, "LearnMult",         1.0f);
+    if (g_wb.yearMinutes < 1.0f) g_wb.yearMinutes = 1.0f;
     g_wb.sparDamage        = iniF(path, "SparDamage",        0.35f);
     g_wb.sparSeconds       = iniF(path, "SparSeconds",       90.0f);
     g_wb.sparXp            = iniF(path, "SparXp",            1.0f);
@@ -184,6 +207,7 @@ bool g_wbRecruitPressed = false;
 bool g_wbCmdPressed[4]  = { false, false, false, false };
 bool g_wbWarbandKeys[4] = { false, false, false, false };
 bool g_wbTrainPressed = false, g_wbTournamentPressed = false;
+bool g_wbTalkPressed = false, g_wbMarryPressed = false, g_wbRecruitShift = false;
 static volatile bool s_journalTogglePending = false;
 
 static void pollKeys()
@@ -196,6 +220,9 @@ static void pollKeys()
     bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     bool train = keyPressed(g_wb.trainKey) && fg && !textInput;
     g_wbTrainPressed = train && !shift;
+    g_wbRecruitShift = shift;
+    g_wbTalkPressed  = keyPressed(g_wb.talkKey) && fg && !textInput;
+    g_wbMarryPressed = keyPressed(g_wb.marryKey) && fg && !textInput;
     g_wbTournamentPressed = train && shift;
     if (keyPressed(g_wb.journalKey) && fg && !textInput) s_journalTogglePending = true;
 }
@@ -216,6 +243,7 @@ static void resetAll(const char* why)
     wbContractsReset();
     wbWarbandReset();
     wbTrainingReset();
+    wbFollowersReset();
     wbUiReset();
     s_worldMinutes = 0.0;
     char b[96]; sprintf_s(b, sizeof(b), "[Warborn] reset (%s)", why); DebugLog(b);
@@ -253,6 +281,7 @@ static void mainLoop_hook(GameWorld* thisptr, float time)
     wbContractsFrame();
     wbWarbandFrame();
     wbTrainingFrame();
+    wbFollowersFrame();
     wbUiMainFrame();
 }
 
@@ -334,6 +363,7 @@ __declspec(dllexport) void startPlugin()
     wbLoadConfig(path);
     wbPersistInstall(folder);
     wbTrainingInit();
+    wbFollowersInstall();
     wbCombatInstall(path);
     wbBattleInstall(path);
 

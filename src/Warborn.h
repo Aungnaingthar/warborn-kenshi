@@ -52,6 +52,16 @@ struct WbConfig
     float sparDamage;           // damage multiplier in a spar
     float sparSeconds;
     float sparXp;
+    // followers
+    int   talkKey;              // H
+    int   marryKey;             // M
+    float yearMinutes;          // real minutes per year of age
+    bool  oldAgeDeath;
+    bool  betrayal;
+    float betrayalRate;
+    bool  betrayalDesert;       // betrayers may leave for their old faction
+    float smithingXpMult;       // easier smithing
+    float learnMult;            // all skills
     // ui
     int   journalKey;
 };
@@ -161,6 +171,27 @@ void wbTrainingReset();
 std::string wbTrainingSummary();
 // Any thread: blunt the blows between two sparring partners.
 void wbTrainingScaleHit(Character* victim, Character* attacker, Damages& damage);
+
+// ------------------------------------------------------------ followers (Followers.cpp)
+void  wbFollowersInstall();
+void  wbFollowersFrame();
+void  wbFollowersReset();
+void  wbFollowerJoined(Character* c, Faction* origin, bool prisoner);
+float wbRecruitBonus();
+float wbContractPayMult();
+void  wbFollowersGlory(float renown);
+void  wbFollowersPaid(int cats);
+void  wbFollowersChooseOrigin(int which);
+bool  wbOriginChosen();
+const char* wbOriginName(int i);
+std::string wbOriginSummary();
+std::string wbFollowersSummary();
+void  wbFollowersSave(std::vector<std::string>& out); void wbFollowersLoad(const std::vector<std::string>& in);
+void  wbWarbandAdd(Character* c);
+std::string wbLatestNews();                           // newest news line, no time stamp
+// pay the player's purse (contracts, trade); false if they can't afford a cost
+void  wbPayPlayer(int cats);
+bool  wbChargePlayer(int cats);
 
 // ------------------------------------------------------------ contracts
 void wbContractsFrame();

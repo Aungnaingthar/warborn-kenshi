@@ -37,6 +37,7 @@
 #include <algorithm>
 
 extern bool g_wbRecruitPressed;
+extern bool g_wbRecruitShift;
 extern bool g_wbCmdPressed[4];
 
 // ------------------------------------------------------------ renown
@@ -56,6 +57,7 @@ void wbAddRenown(float amount, const char* why)
 {
     if (amount <= 0.0f) return;
     s_renown += amount;
+    wbFollowersGlory(amount);                         // your people share your glory
     char lb[160]; sprintf_s(lb, sizeof(lb), "[Warborn] renown +%.1f (%s) = %.1f", amount, why ? why : "", s_renown); wbLog(lb);
     int idx = s_titleIdx;
     while (idx + 1 < TITLE_COUNT && s_renown >= TITLES[idx + 1].at) ++idx;
@@ -206,10 +208,21 @@ static void tryRecruit()
     Character* c = ou->player->selectedCharacter.getCharacter();
     if (!c) { wbToast("Click a person to select them, then press the recruit key."); return; }
     if (c->isPlayerCharacter()) { wbToast("They already ride with you."); return; }
-    if (c->isDead() || c->isUnconcious()) { wbToast("They can't hear you right now."); return; }
+    if (c->isDead()) { wbToast("The dead don't follow anyone."); return; }
     Faction* pf = wbPlayerFaction();
     Character* leader = firstConsciousPlayerChar();
     if (!pf || !leader) return;
+    // PRISONER: someone knocked out and helpless is taken to work for you
+    if (c->isUnconcious() || c->isDown())
+    {
+        Faction* of = c->getFaction();
+        std::string pn = c->getName();
+        c->setFaction(pf, leader->getPlatoon());
+        wbFollowerJoined(c, of, true);
+        if (of && !wbIsPlayerFaction(of)) wbGiveRep(of, -5.0f, "for taking one of theirs prisoner");
+        wbNews((pn + " has been taken prisoner and put to work. They'll try to escape until they come to trust you.").c_str());
+        return;
+    }
 
     double now = wbWorldMinutes();
     for (size_t i = 0; i < s_refusals.size(); ++i)
@@ -229,6 +242,7 @@ static void tryRecruit()
     if (towns >= 5) chance *= 0.6f;                   // loyal to a great power
     float fame = s_renown / 400.0f; if (fame > 0.25f) fame = 0.25f;
     chance += fame;                                   // your name carries weight
+    chance += wbRecruitBonus();                       // exiles attract outcasts
     if (chance < 0.02f) chance = 0.02f;
     if (chance > 0.95f) chance = 0.95f;
 
@@ -244,7 +258,9 @@ static void tryRecruit()
         wbToast(b); return;
     }
     c->setFaction(pf, leader->getPlatoon());
-    wbNews((name + " has joined your band! " + wbLine(LINE_RECRUIT_YES, v)).c_str());
+    wbFollowerJoined(c, vf, false);
+    if (g_wbRecruitShift) { wbWarbandAdd(c); wbNews((name + " joins your warband - yours to command, not to control. " + wbLine(LINE_RECRUIT_YES, v)).c_str()); }
+    else wbNews((name + " has joined your band! " + wbLine(LINE_RECRUIT_YES, v)).c_str());
     wbAddRenown(1.0f, "a new follower");
 }
 

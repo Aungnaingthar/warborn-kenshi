@@ -51,17 +51,13 @@ A living-world overhaul for Kenshi, built as an RE_Kenshi plugin with KenshiLib.
 - **Territory and diplomacy map** in the journal.
 - **Saving** per save game.
 
-## Roadmap (requested next)
-- **Start options:** origins such as Noble, Exile, Merchant, Slave, Clan Warrior. Each sets starting standing, gear, followers and story hooks.
-- **Talk to anyone:** a Warborn talk window with lines that depend on the person's faction, mood, traits and your relationship (ask for news, rumours, work, join, threaten, bribe).
-- **Relationships and loyalty:** a personal bond score with each of your people. Loyalty comes from the bond **or** from shared origin (same faction or clan). **Traits** (Loyal, Greedy, Ambitious, Coward, Zealot...) decide how likely **betrayal** is: deserting, stealing or switching sides, rare or common depending on trait and bond.
-- **Children:** couples among your people can have a child who appears as a young adult (no child models in Kenshi).
-- **Easier smithing:** faster crafting and better quality at lower skill (settings).
-- **Two kinds of recruits:** join your squad (you control them) *or* join your warband (you only command them). Ask at recruit time.
-- **Trade:** factions you're friendly with offer better prices; caravans between towns; trade contracts.
-- **Prisoners:** capture, imprison and put prisoners to work (Kenshi has slave-labour tasks to build on).
+- **Training:** sparring and tournaments.
+- **Start options (origins), talking to anyone, traits/bond/loyalty/betrayal, two kinds of recruits, prisoners who work, trade (paid contracts, caravans), age and marriage, easier smithing.**
+
+## Roadmap (next)
+- **Children:** needs a safe way to create new characters (Kenshi has `Character::giveBirth`, still to research). Until then, couples only.
+- **Prisoner labour camps:** shackles and cages with Kenshi's own slave tasks.
 - **Your own nation:** towns you take pay taxes, need guards, and can be attacked.
-- **Age, family, marriage:** characters age over in-game days; bonds between your people; children appear as young adults (Kenshi has no child models).
 - **More clothes:** needs 3D models. Clothing mods from other authors work alongside Warborn.
 - **Founding new settlements:** needs research into Kenshi's town creation.
 - **FCS content:** original factions, characters, dialogue trees and quests, made in the FCS editor.

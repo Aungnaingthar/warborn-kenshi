@@ -11,7 +11,7 @@ Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 - `main`: the earlier Direct Control-based base, kept for reference.
 - `phase1-combat`: the earlier combat experiments.
 
-## Features (v0.2)
+## Features (v0.3)
 
 | | |
 |---|---|
@@ -30,12 +30,21 @@ Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 | **Territory map** | Journal Map tab: every town in its owner's colour, sieges marked, each power's wars and pacts. |
 | **Saved with your game** | News, renown, pacts, grudges, contracts and your warband are stored per save. |
 | **Original dialogue** | Many varied lines for rumours, war news, conquests, pacts and recruit answers. |
+| **Training** | **T**: two of your people spar 1 vs 1 (blunted blows, real bruises and knock-downs) and learn faster. **Shift+T**: a knockout tournament, the champion gains fame. |
+| **Start options** | Journal **People** tab: choose Noble, Merchant, Warrior, Exile or Slave-born once per game, each with its own money, standing, fame and loyalty effects. |
+| **Talk to anyone** | **H** on the selected person: greetings by how their faction sees you, rumours, what they think of your fame, work. Your own people tell you how they feel. |
+| **Traits, bond, loyalty, betrayal** | Each follower has a trait, a bond with you, an origin and an age. People of your own land stay loyal; low loyalty can mean theft, desertion or escape, depending on the trait. |
+| **Two kinds of recruits** | **Y** joins your squad (you control them). **Shift+Y** joins your warband (you only command them). |
+| **Prisoners who work** | **Y** on a knocked-out person takes them prisoner. They work like anyone else but try to escape until they trust you, then they stay for good. |
+| **Trade** | Contracts pay cats. Caravan contracts: invest now, get your share back with profit if their towns stay safe. |
+| **Age and marriage** | Everyone ages; old fighters weaken and can die of old age. **M** marries two of your people (more loyal together; they grieve if one dies). |
+| **Easier smithing** | Smithing skills learn 3× faster (adjustable). |
 
 ## Controls
 
 | Key | Action |
 |---|---|
-| `J` | Journal: News, Wars, Contracts (with Accept buttons), Reputation |
+| `J` | Journal: News, Wars, Contracts (with Accept buttons), Reputation, Map, People (with Origin buttons) |
 | `Y` | Recruit the selected person |
 | `F5` | Your people near your selected character: follow me |
 | `F6` | Hold position |
@@ -45,6 +54,11 @@ Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 | `U` | Warband: take the nearest enemy town or camp |
 | `I` | Warband: patrol around your selected character |
 | `O` | Warband: return to your selected character |
+| `T` | Spar: the selected fighter trains 1 vs 1 with the nearest squadmate |
+| `Shift+T` | Tournament among your nearby fighters |
+| `H` | Talk to the selected person (press again for the next topic) |
+| `M` | Marry the selected person to the nearest unmarried one of your people |
+| `Shift+Y` | Recruit into the warband instead of the squad |
 
 Every key and number is in `Warborn.ini`.
 

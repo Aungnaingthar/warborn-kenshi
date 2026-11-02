@@ -95,6 +95,13 @@ static int enemiesNear(const Ogre::Vector3& at, float range, Character* ref)
     return n;
 }
 
+void wbWarbandAdd(Character* c)
+{
+    if (!c) return;
+    for (size_t i = 0; i < s_band.size(); ++i) if (s_band[i] == c) return;
+    s_band.push_back(c);
+}
+
 static void toggleMember()
 {
     Character* c = selectedOwn();
