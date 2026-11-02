@@ -96,6 +96,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="WASDCombatPlugin.cpp" />
+    <ClCompile Include="Warborn.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Warborn.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

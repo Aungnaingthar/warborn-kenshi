@@ -4,7 +4,9 @@ A Kingdom Come: Deliverance 2-style overhaul for Kenshi: grounded, skill-and-arm
 
 Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 
-**Status:** Phase 0. The base code is imported; we're getting the build working.
+**Status**
+- `main` branch: Phase 0, the unchanged Direct Control base. Build this first to check your toolchain.
+- `phase1-combat` branch: Phase 1, skill/armor damage + hit-stop + camera shake (`Warborn.cpp`). Settings are in the `[Warborn]` section of `WASDCombatPlugin.ini`.
 
 ## Credits and license
 

@@ -35,6 +35,7 @@
 #include <kenshi/Town.h>                    // TownBase::withinBordersRange (slave camp bounds)
 #include <kenshi/Building/Building.h>      // Building::hasInterior (FP floor cutaway gate)
 #include <core/Functions.h>
+#include "Warborn.h"                 // Warborn: KCD 2-style combat layer
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -2829,6 +2830,7 @@ static int        s_retreatSessionCacheCount = 0;
 static void otsRestoreNames();   // fwd decl — defined with the OTS camera code
 static void clearAllState()
 {
+    warbornReset(ou);        // WARBORN: drop pending hit-stop / shake
     s_mode              = MODE_VANILLA;
     s_wHeld             = false;
     s_aHeld             = false;
@@ -6179,7 +6181,7 @@ static void dcDriveFloorReveal()
 // CameraClass::update hook — runs AFTER the game's camera update, BEFORE
 // render: this is the only point whose writes survive to the frame.
 static void (*s_cameraUpdateOrig)(CameraClass* thisptr, bool controlEnabled);
-static void cameraUpdate_hook(CameraClass* thisptr, bool controlEnabled)
+static void cameraUpdate_inner(CameraClass* thisptr, bool controlEnabled)
 {
     // OTS owns the camera: clear the vanilla MMB-rotate state before the
     // game's update sees it, so MMB does nothing while OTS is active.
@@ -6713,6 +6715,16 @@ static void cameraUpdate_hook(CameraClass* thisptr, bool controlEnabled)
         s_fpNode->setPosition(eye);
         s_fpNode->setOrientation(q);
     }
+}
+
+// WARBORN: camera shake goes on top of whatever the game / Direct Control did
+// with the camera this frame - player camera only (the hook also runs for the
+// inventory portrait cameras).
+static void cameraUpdate_hook(CameraClass* thisptr, bool controlEnabled)
+{
+    cameraUpdate_inner(thisptr, controlEnabled);
+    if (thisptr && ou && ou->player && thisptr == ou->player->camera && thisptr->camera)
+        warbornCamera(thisptr->camera);
 }
 
 // CameraClass::restrictPosition hook.  This call is what REFRESHES the interior
@@ -8532,7 +8544,7 @@ static float getDodge_hook(CharStats* st, bool bonuses)
 // including the HELD skill block, which vanilla resolves from the block
 // technique currently playing - forwards untouched.
 static HitMaterialType (*s_iHitOrig)(CombatClass* cc, CutDirection dir, Damages& damage, Character* who);
-static HitMaterialType iHitYouAreYouHit_hook(CombatClass* cc, CutDirection dir, Damages& damage, Character* who)
+static HitMaterialType iHitYouAreYouHit_inner(CombatClass* cc, CutDirection dir, Damages& damage, Character* who)
 {
     Character* self = cc ? cc->me : nullptr;
     if (self && self == s_freeMoveAnchor) glintImpact(who);   // weapon glint: flash out at the hit (blocked or not)
@@ -8626,6 +8638,20 @@ static HitMaterialType iHitYouAreYouHit_hook(CombatClass* cc, CutDirection dir, 
         VerbLog(vb);
     }
     return rv;
+}
+
+// WARBORN: every melee hit in the world passes through here (cc->me = the one
+// being hit, who = the attacker).  Warborn scales the damage BEFORE the game
+// resolves the hit (skill gap + armour exposure, for every fighter), then
+// queues hit-stop / camera shake AFTER, when the controlled character is in it.
+static HitMaterialType iHitYouAreYouHit_hook(CombatClass* cc, CutDirection dir, Damages& damage, Character* who)
+{
+    Character* victim = cc ? cc->me : nullptr;
+    Character* player = s_freeMoveAnchor;
+    warbornBeforeHit(victim, who, dir, damage, player);
+    HitMaterialType r = iHitYouAreYouHit_inner(cc, dir, damage, who);
+    warbornAfterHit(victim, who, r, player);
+    return r;
 }
 
 // initCombatMode_hook and youKnowImAttacking_hook removed —
@@ -8762,6 +8788,7 @@ static bool dcInUpdateList(GameWorld* gw, Character* c)
 
 static void mainLoop_hook(GameWorld* thisptr, float time)
 {
+    warbornFrame(thisptr);   // WARBORN: hit-stop timing (main thread)
     s_gwFrame = thisptr;  // manual combat: world for the dodge foe scan (fresh every frame)
     // Build 74 (quickload froze 2026-10-01, 6501 per-frame AVs): the SaveManager
     // signal is set when a load is REQUESTED and consumed before the loading
@@ -11966,6 +11993,13 @@ __declspec(dllexport) void startPlugin()
     // registration never fires (load-order or hook failure).  Once
     // dc_native_keybinds_registered appears, the INI is inert.
     loadKeybinds();
+
+    // WARBORN: [Warborn] section of the same .ini
+    {
+        char wbPath[MAX_PATH];
+        getConfigPath(wbPath, sizeof(wbPath));
+        warbornLoadConfig(wbPath);
+    }
 
     // Native Controls-menu keybinds (KEP pattern) — all three hooks are
     // DIAG (2026-09-14): real RVAs of the functions behind two open questions
