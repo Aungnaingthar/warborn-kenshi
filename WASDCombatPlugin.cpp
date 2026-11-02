@@ -35,6 +35,7 @@
 #include <kenshi/Town.h>                    // TownBase::withinBordersRange (slave camp bounds)
 #include <kenshi/Building/Building.h>      // Building::hasInterior (FP floor cutaway gate)
 #include <core/Functions.h>
+#include <kenshi/Damages.h>              // Warborn: hit damage (staggers)
 #include "Warborn.h"                 // Warborn: KCD 2-style combat layer
 
 #define WIN32_LEAN_AND_MEAN
@@ -719,9 +720,9 @@ static volatile bool      s_wbMouseLive       = false;  // mouse buttons are com
 static volatile bool      s_wbAltHeld         = false;  // poll: Alt = free cursor
 static ULONGLONG          s_wbNextAcquireMs   = 0;
 
-enum WbDir { WB_THRUST = 0, WB_OVERHEAD, WB_LEFT, WB_RIGHT, WB_RISING, WB_DIR_COUNT };
-static const char* const  WB_DIR_NAME[WB_DIR_COUNT] = { "THRUST", "OVERHEAD", "LEFT", "RIGHT", "RISING" };
-static int                s_wbDir             = WB_THRUST;
+enum WbDir { WBD_THRUST = 0, WBD_OVERHEAD, WBD_LEFT, WBD_RIGHT, WBD_RISING, WBD_COUNT };
+static const char* const  WBD_NAME[WBD_COUNT] = { "THRUST", "OVERHEAD", "LEFT", "RIGHT", "RISING" };
+static int                s_wbDir             = WBD_THRUST;
 static ULONGLONG          s_wbDirSetMs        = 0;
 static float              s_wbAccX            = 0.0f;
 static float              s_wbAccY            = 0.0f;
@@ -741,8 +742,8 @@ static void wbFeedMouse(float dx, float dy)
     s_wbAccY = s_wbAccY * 0.8f + dy;
     if (s_wbAccX * s_wbAccX + s_wbAccY * s_wbAccY < s_wbFlickPx * s_wbFlickPx) return;
     int d;
-    if (fabsf(s_wbAccY) >= fabsf(s_wbAccX)) d = (s_wbAccY < 0.0f) ? WB_OVERHEAD : WB_RISING;
-    else                                    d = (s_wbAccX < 0.0f) ? WB_LEFT     : WB_RIGHT;
+    if (fabsf(s_wbAccY) >= fabsf(s_wbAccX)) d = (s_wbAccY < 0.0f) ? WBD_OVERHEAD : WBD_RISING;
+    else                                    d = (s_wbAccX < 0.0f) ? WBD_LEFT     : WBD_RIGHT;
     s_wbDir = d;
     s_wbDirSetMs = GetTickCount64();
     s_wbAccX = s_wbAccY = 0.0f;
@@ -750,13 +751,14 @@ static void wbFeedMouse(float dx, float dy)
 // Current swing direction; falls back to a thrust after a quiet moment.
 static int wbCurrentDir()
 {
-    if (s_wbDir != WB_THRUST && GetTickCount64() - s_wbDirSetMs > (ULONGLONG)s_wbDirResetMs)
-        s_wbDir = WB_THRUST;
+    if (s_wbDir != WBD_THRUST && GetTickCount64() - s_wbDirSetMs > (ULONGLONG)s_wbDirResetMs)
+        s_wbDir = WBD_THRUST;
     return s_wbDir;
 }
 static bool wbOwnsMouseLook() { return s_wbStanceOn && s_wbLockCamera && s_wbLock != nullptr; }
 static void wbCameraFollow();   // defined with the stance tick (needs the lock helpers)
 static void wbStaggerTick();    // defined with the hit hook (WARBORN STAGGERS)
+static void wbStanceTick();     // defined after the aim-focus helpers
 // Staggers (KCD 2 hit reactions with Kenshi's own stumble animations).
 static bool               s_wbStaggers        = true;
 static bool               s_wbParryStagger    = true;
@@ -767,7 +769,7 @@ static int                s_wbStagN           = 0;      // queued staggers (rese
 static void wbResetAll()
 {
     s_wbStanceOn = false; s_wbStanceWant = false; s_wbManualByUs = false; s_wbCamByUs = false;
-    s_wbLock = nullptr; s_wbMouseLive = false; s_wbWantDir = -1; s_wbDir = WB_THRUST;
+    s_wbLock = nullptr; s_wbMouseLive = false; s_wbWantDir = -1; s_wbDir = WBD_THRUST;
     s_wbAccX = s_wbAccY = 0.0f;
 }
 // Markers are GUI-space (Kenshi's DX11 renderer needs shader materials for raw
@@ -5292,13 +5294,13 @@ static void wbHudUpdate()
     }
     if (!s_wbHud) return;
     if (!want) { if (s_wbHud->getVisible()) s_wbHud->setVisible(false); s_wbHudShown = -2; return; }
-    int show = !s_wbLock ? -1 : (s_wbDirectional ? wbCurrentDir() : WB_DIR_COUNT);
+    int show = !s_wbLock ? -1 : (s_wbDirectional ? wbCurrentDir() : WBD_COUNT);
     if (show != s_wbHudShown)
     {
         s_wbHudShown = show;
         if (show == -1)                 s_wbHud->setCaption("no enemy in reach");
-        else if (show == WB_DIR_COUNT)  s_wbHud->setCaption("LOCKED");
-        else                            s_wbHud->setCaption(WB_DIR_NAME[show]);
+        else if (show == WBD_COUNT)  s_wbHud->setCaption("LOCKED");
+        else                            s_wbHud->setCaption(WBD_NAME[show]);
     }
     MyGUI::IntSize v = MyGUI::RenderManager::getInstance().getViewSize();
     s_wbHud->setPosition(v.width / 2 - 90, v.height / 2 + 46);
@@ -8317,7 +8319,7 @@ static void wbStanceTick()
             s_wbStanceOn = true;
             if (!s_manualAttackOn)  { s_manualAttackOn  = true; s_wbManualByUs = true; }
             if (!s_camRotateToggle) { s_camRotateToggle = true; s_wbCamByUs    = true; }
-            s_wbDir = WB_THRUST; s_wbDirSetMs = now; s_wbNextAcquireMs = 0;
+            s_wbDir = WBD_THRUST; s_wbDirSetMs = now; s_wbNextAcquireMs = 0;
             DebugLog("[Warborn] stance_on");
         }
         else if (now - s_wbWantSinceMs > 2500) wbSetStance(false, "direct_control_unavailable");
@@ -8362,7 +8364,7 @@ static void wbStanceTick()
         {
             s_wbWantDir = wbCurrentDir();
             s_wbWantDirUntil = now + 1500;
-            char b[64]; sprintf_s(b, sizeof(b), "[Warborn] swing_dir=%s", WB_DIR_NAME[s_wbWantDir]); VerbLog(b);
+            char b[64]; sprintf_s(b, sizeof(b), "[Warborn] swing_dir=%s", WBD_NAME[s_wbWantDir]); VerbLog(b);
         }
     }
 }
@@ -8404,10 +8406,10 @@ static CutDirection wbDirToCut(int d)
 {
     switch (d)
     {
-        case WB_OVERHEAD: return CUT_DOWNWARD;
-        case WB_LEFT:     return CUT_LEFT;
-        case WB_RIGHT:    return CUT_RIGHT;
-        case WB_RISING:   return CUT_UPWARDS;
+        case WBD_OVERHEAD: return CUT_DOWNWARD;
+        case WBD_LEFT:     return CUT_LEFT;
+        case WBD_RIGHT:    return CUT_RIGHT;
+        case WBD_RISING:   return CUT_UPWARDS;
         default:          return CUT_THRUST;
     }
 }
@@ -8431,7 +8433,7 @@ static CombatTechniqueData* wbChooseAttack_hook(CharStats* st, float range, floa
         ++s_wbChooseLogs;
         char b[200];
         sprintf_s(b, sizeof(b), "[Warborn] choose_attack want=%s matched=%d anim=%s",
-                  WB_DIR_NAME[s_wbWantDir], hit ? 1 : 0, pick ? pick->animation.c_str() : "?");
+                  WBD_NAME[s_wbWantDir], hit ? 1 : 0, pick ? pick->animation.c_str() : "?");
         DebugLog(b);
     }
     return pick;
