@@ -756,6 +756,14 @@ static int wbCurrentDir()
 }
 static bool wbOwnsMouseLook() { return s_wbStanceOn && s_wbLockCamera && s_wbLock != nullptr; }
 static void wbCameraFollow();   // defined with the stance tick (needs the lock helpers)
+static void wbStaggerTick();    // defined with the hit hook (WARBORN STAGGERS)
+// Staggers (KCD 2 hit reactions with Kenshi's own stumble animations).
+static bool               s_wbStaggers        = true;
+static bool               s_wbParryStagger    = true;
+static float              s_wbStaggerDamage   = 25.0f;
+static float              s_wbStaggerMaxChance= 0.85f;
+static float              s_wbStaggerCooldownMs = 1500.0f;
+static int                s_wbStagN           = 0;      // queued staggers (reset by clearAllState)
 static void wbResetAll()
 {
     s_wbStanceOn = false; s_wbStanceWant = false; s_wbManualByUs = false; s_wbCamByUs = false;
@@ -2944,6 +2952,7 @@ static void clearAllState()
 {
     warbornReset(ou);        // WARBORN: drop pending hit-stop / shake
     wbResetAll();            // WARBORN: combat stance off
+    s_wbStagN = 0;           // WARBORN: drop queued staggers
     s_mode              = MODE_VANILLA;
     s_wHeld             = false;
     s_aHeld             = false;
@@ -8050,6 +8059,7 @@ static void manualBlockTick()
     manualAttackTick();
     manualAimTick();
     wbStanceTick();       // WARBORN: KCD 2 stance (lock overrides the aim focus)
+    wbStaggerTick();      // WARBORN: queued hit / parry staggers
     manualStaggerTick();
     manualDodgePressTick();
     manualAttackPressTick();
@@ -9021,13 +9031,114 @@ static HitMaterialType iHitYouAreYouHit_inner(CombatClass* cc, CutDirection dir,
 // being hit, who = the attacker).  Warborn scales the damage BEFORE the game
 // resolves the hit (skill gap + armour exposure, for every fighter), then
 // queues hit-stop / camera shake AFTER, when the controlled character is in it.
+// ===================================================================
+// WARBORN STAGGERS - KCD 2 hit reactions using Kenshi's own stumble
+// animations (the game picks the one for the direction / body part).
+//   * a strong hit can stagger whoever takes it (damage, blunt share and the
+//     attacker's Strength raise the chance; armour and Toughness lower it);
+//   * a PERFECT BLOCK staggers the attacker back - your opening to counter.
+// Everyone plays by these rules (the player can be staggered too).  Queued
+// here, played next frame from the main loop through CombatClass::_getHit
+// with stumble = true and zero damage, after re-checking the character.
+// ===================================================================
+struct WbStagger { Character* victim; Character* attacker; CutDirection dir; ULONGLONG due; };
+static WbStagger s_wbStag[8];
+static bool      s_wbInGetHit  = false;
+struct WbRecent  { Character* c; ULONGLONG until; };
+static WbRecent  s_wbRecent[16];
+static int       s_wbStagLogs  = 0;
+
+static bool wbRecentlyStaggered(Character* c, ULONGLONG now)
+{
+    for (int i = 0; i < 16; ++i) if (s_wbRecent[i].c == c && now < s_wbRecent[i].until) return true;
+    return false;
+}
+static void wbMarkStaggered(Character* c, ULONGLONG now)
+{
+    int slot = 0;
+    for (int i = 0; i < 16; ++i)
+    {
+        if (s_wbRecent[i].c == c || now >= s_wbRecent[i].until) { slot = i; break; }
+        if (s_wbRecent[i].until < s_wbRecent[slot].until) slot = i;
+    }
+    s_wbRecent[slot].c = c;
+    s_wbRecent[slot].until = now + (ULONGLONG)s_wbStaggerCooldownMs;
+}
+static void wbQueueStagger(Character* v, Character* a, CutDirection dir, ULONGLONG delayMs, const char* why)
+{
+    ULONGLONG now = GetTickCount64();
+    if (!v || !a || s_wbStagN >= 8 || wbRecentlyStaggered(v, now)) return;
+    for (int i = 0; i < s_wbStagN; ++i) if (s_wbStag[i].victim == v) return;
+    WbStagger q; q.victim = v; q.attacker = a; q.dir = dir; q.due = now + delayMs;
+    s_wbStag[s_wbStagN++] = q;
+    if (s_wbStagLogs < 80)
+    {
+        ++s_wbStagLogs;
+        char b[96]; sprintf_s(b, sizeof(b), "[Warborn] stagger_queued why=%s dir=%d player=%d", why, (int)dir,
+                              (v == s_freeMoveAnchor) ? 1 : (a == s_freeMoveAnchor ? 2 : 0));
+        DebugLog(b);
+    }
+}
+static void wbAfterHitStagger(Character* victim, Character* attacker, CutDirection dir, HitMaterialType r,
+                              float total, float blunt, bool perfect)
+{
+    if (!victim || !attacker) return;
+    if (perfect) { if (s_wbParryStagger) wbQueueStagger(attacker, victim, dir, 120, "parry"); return; }
+    if (!s_wbStaggers) return;
+    if (r != HIT_FLESH && r != HIT_METAL && r != HIT_CHAIN) return;    // missed / blocked: no stagger
+    float base = s_wbStaggerDamage > 1.0f ? s_wbStaggerDamage : 1.0f;
+    if (total < base * 0.5f) return;
+    float chance = (total - base * 0.5f) / (base * 1.5f);
+    if (total > 0.0f) chance *= 1.0f + 0.6f * (blunt / total);         // blunt rocks you
+    if (r != HIT_FLESH) chance *= 0.6f;                                 // armour took the brunt
+    CharStats* as = attacker->getStats();
+    CharStats* vs = victim->getStats();
+    if (as) chance *= 0.75f + as->strengthActual() / 200.0f;
+    if (vs) chance *= 1.15f - vs->toughness() / 200.0f;
+    if (chance > s_wbStaggerMaxChance) chance = s_wbStaggerMaxChance;
+    if (chance <= 0.0f) return;
+    if ((float)rand() / (float)RAND_MAX < chance) wbQueueStagger(victim, attacker, dir, 0, "hit");
+}
+static void wbStaggerTick()
+{
+    if (s_wbStagN == 0) return;
+    ULONGLONG now = GetTickCount64();
+    int keep = 0;
+    for (int i = 0; i < s_wbStagN; ++i)
+    {
+        WbStagger q = s_wbStag[i];
+        if (now < q.due) { s_wbStag[keep++] = q; continue; }
+        Character* v = q.victim;
+        if (!focusTargetLoaded(v) || !focusTargetLoaded(q.attacker)) continue;
+        if (v->isDead() || v->isUnconcious() || v->isDown()) continue;
+        CombatClass* vcc = v->getCombatClass();
+        if (!vcc || !vcc->combatModeActive || vcc->getCombatState() == STUMBLE) continue;
+        Damages none(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+        s_wbInGetHit = true;
+        vcc->_getHit(q.dir, none, (RootObject*)q.attacker, true);
+        s_wbInGetHit = false;
+        wbMarkStaggered(v, now);
+        if (s_wbStagLogs < 160)
+        {
+            ++s_wbStagLogs;
+            char b[96]; sprintf_s(b, sizeof(b), "[Warborn] stagger_played state_now=%d", (int)vcc->getCombatState());
+            DebugLog(b);
+        }
+    }
+    s_wbStagN = keep;
+}
+
 static HitMaterialType iHitYouAreYouHit_hook(CombatClass* cc, CutDirection dir, Damages& damage, Character* who)
 {
+    if (s_wbInGetHit) return iHitYouAreYouHit_inner(cc, dir, damage, who);   // our own stagger call
     Character* victim = cc ? cc->me : nullptr;
     Character* player = s_freeMoveAnchor;
     warbornBeforeHit(victim, who, dir, damage, player);
+    float total = damage.total(), blunt = damage.blunt;
+    ULONGLONG perfectBefore = s_perfectLastHitMs;
     HitMaterialType r = iHitYouAreYouHit_inner(cc, dir, damage, who);
     warbornAfterHit(victim, who, r, player);
+    wbAfterHitStagger(victim, who, dir, r, total, blunt, s_perfectLastHitMs != perfectBefore);
     return r;
 }
 
@@ -12389,6 +12500,11 @@ static void wbLoadStanceConfig(const char* path)
     s_wbSpeedCap       = wbIniB(path, "RealisticSpeed",    s_wbSpeedCap);
     s_wbAttackSpeedMax = wbIniF(path, "AttackSpeedMax",    s_wbAttackSpeedMax);
     s_wbBlockSpeedMax  = wbIniF(path, "BlockSpeedMax",     s_wbBlockSpeedMax);
+    s_wbStaggers       = wbIniB(path, "Staggers",          s_wbStaggers);
+    s_wbParryStagger   = wbIniB(path, "ParryStagger",      s_wbParryStagger);
+    s_wbStaggerDamage  = wbIniF(path, "StaggerDamage",     s_wbStaggerDamage);
+    s_wbStaggerMaxChance = wbIniF(path, "StaggerMaxChance", s_wbStaggerMaxChance);
+    s_wbStaggerCooldownMs = wbIniF(path, "StaggerCooldownMs", s_wbStaggerCooldownMs);
     if (s_wbLockBreakRange < s_wbLockRange) s_wbLockBreakRange = s_wbLockRange;
     if (s_wbFlickPx < 2.0f) s_wbFlickPx = 2.0f;
     char b[200];
