@@ -302,6 +302,7 @@ __declspec(dllexport) void startPlugin()
     strcat_s(path, sizeof(path), "Warborn.ini");
     wbLoadConfig(path);
     wbCombatInstall(path);
+    wbBattleInstall(path);
 
     if (KenshiLib::SUCCESS != KenshiLib::AddHook(
             KenshiLib::GetRealAddress(&GameWorld::_NV_mainLoop_GPUSensitiveStuff),
