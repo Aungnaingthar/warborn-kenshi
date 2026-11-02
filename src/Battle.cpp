@@ -40,7 +40,7 @@ static Engage           s_eng[MAX_ENGAGE];
 static int              s_engN = 0;
 static CRITICAL_SECTION s_lock;
 static volatile LONG    s_redirectLogs = 0;
-static const ULONGLONG  FRESH_MS = 3000;
+static const ULONGLONG  FRESH_MS = 1500;   // short: fighters far away can be unloaded
 
 static bool usable(Character* c)
 {

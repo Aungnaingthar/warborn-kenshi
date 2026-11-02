@@ -136,7 +136,10 @@ void wbCombatInstall(const char* path)
     if (s_skillMultMin > s_skillMultMax) s_skillMultMin = s_skillMultMax;
     if (s_totalMin > s_totalMax) s_totalMin = s_totalMax;
 
+    // KenshiLib may export it as protected, public or private: try all three manglings.
     intptr_t sp = resolveExport("?calculateAttackOrBlockSpeed@CharStats@@IEAAMMM_N@Z");
+    if (!sp) sp = resolveExport("?calculateAttackOrBlockSpeed@CharStats@@QEAAMMM_N@Z");
+    if (!sp) sp = resolveExport("?calculateAttackOrBlockSpeed@CharStats@@AEAAMMM_N@Z");
     if (!sp)
         ErrorLog("Warborn: calculateAttackOrBlockSpeed not found - speed cap off");
     else if (KenshiLib::SUCCESS != KenshiLib::AddHook(sp, (void*)&speed_hook, &s_speedOrig))

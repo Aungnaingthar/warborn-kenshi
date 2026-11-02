@@ -172,12 +172,12 @@ void wbLoadConfig(const char* path)
     if (g_wb.yearMinutes < 1.0f) g_wb.yearMinutes = 1.0f;
     g_wb.sparDamage        = iniF(path, "SparDamage",        0.35f);
     g_wb.sparSeconds       = iniF(path, "SparSeconds",       90.0f);
-    g_wb.sparXp            = iniF(path, "SparXp",            1.0f);
+    g_wb.sparXp            = iniF(path, "SparXp",            3.0f);
     g_wb.yardKey           = iniKey(path, "YardKey",         "ALT+Y");
     g_wb.yardRadius        = iniF(path, "YardRadius",        120.0f);
     g_wb.yardRestSeconds   = iniF(path, "YardRestSeconds",   40.0f);
-    g_wb.partnerXp         = iniF(path, "PartnerXp",         0.4f);
-    g_wb.soloDummyXp       = iniF(path, "SoloDummyXp",       0.1f);
+    g_wb.partnerXp         = iniF(path, "PartnerXp",         1.5f);
+    g_wb.soloDummyXp       = iniF(path, "SoloDummyXp",       0.4f);
     g_wb.partnerRange      = iniF(path, "PartnerRange",      200.0f);
     if (g_wb.maxWars < 1) g_wb.maxWars = 1;
     if (g_wb.warIntervalMin < 0.5f) g_wb.warIntervalMin = 0.5f;

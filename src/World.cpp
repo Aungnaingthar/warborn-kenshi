@@ -40,7 +40,8 @@ struct FacMind
     Faction*  f;
     float     aggression;     // 0.2 .. 1.0, fixed per faction (its personality)
     Faction*  grudge;         // who took a town from us
-    TownBase* lostTown;
+    TownBase* lostTown;       // compare only - never dereference unless townStillExists()
+    std::string lostTownName;
     double    grudgeUntil;
 };
 static std::vector<FacMind> s_minds;
@@ -68,7 +69,7 @@ static void refreshMinds()
         if (!f || mindOf(f)) continue;
         FacMind m;
         m.f = f; m.aggression = personality(wbFactionName(f));
-        m.grudge = NULL; m.lostTown = NULL; m.grudgeUntil = 0.0;
+        m.grudge = NULL; m.lostTown = NULL; m.grudgeUntil = 0.0; m.lostTownName = "";
         s_minds.push_back(m);
     }
 }
@@ -111,10 +112,15 @@ static TownBase* nearestOwnTown(Faction* f, const Ogre::Vector3& to)
 
 // ------------------------------------------------------------ war plans
 enum { STAGE_PLANNING = 0, STAGE_MARCHING = 1 };
+// Town pointers: Kenshi unloads and re-creates distant towns, so a TownBase*
+// kept from earlier may be gone. They are only compared, or dereferenced
+// after townStillExists() finds them in a faction's current town list;
+// names are copied when the plan is made.
 struct WarPlan
 {
     WbWarEvent ev;
     TownBase*  home;
+    std::string homeName;
     int        stage;
     double     stageAt;
     const char* reason;
@@ -273,7 +279,7 @@ static void startPlan(double now)
     p.ev.attacker = m->f; p.ev.defender = def; p.ev.town = town;
     p.ev.attackerName = wbFactionName(m->f); p.ev.defenderName = wbFactionName(def); p.ev.townName = wbTownName(town);
     p.ev.conquered = false; p.ev.playerHelpedAttacker = 0; p.ev.playerHelpedDefender = 0;
-    p.home = home; p.stage = STAGE_PLANNING; p.stageAt = now; p.reason = reason;
+    p.home = home; p.homeName = wbTownName(home); p.stage = STAGE_PLANNING; p.stageAt = now; p.reason = reason;
     s_plans.push_back(p);
 
     WbVars v; v.A = p.ev.attackerName; v.D = p.ev.defenderName; v.T = p.ev.townName; v.H = wbTownName(home); v.R = reason;
@@ -286,6 +292,13 @@ static void launch(WarPlan& p, double now)
     if (!townStillExists(p.ev.town, &owner) || owner != p.ev.defender) { p.stage = -1; return; }
     lektor<CampaignData*>& camps = p.ev.attacker->warMgr->possibleCampaigns;
     if (camps.size() == 0) { p.stage = -1; return; }
+    Faction* homeOwner = NULL;
+    if (!townStillExists(p.home, &homeOwner) || homeOwner != p.ev.attacker)   // home unloaded or lost: pick again
+    {
+        p.home = nearestOwnTown(p.ev.attacker, p.ev.town->getPosition());
+        if (!p.home) { p.stage = -1; return; }
+        p.homeName = wbTownName(p.home);
+    }
     CampaignData* data = camps[(uint32_t)(wbRand01() * (float)(camps.size() - 1) + 0.5f)];
     CampaignInstance* inst = p.ev.attacker->warMgr->triggerCampaign(p.ev.town, data, p.home);
     char lb[200];
@@ -295,7 +308,7 @@ static void launch(WarPlan& p, double now)
     if (!inst) { p.stage = -1; return; }
     p.stage = STAGE_MARCHING; p.stageAt = now;
     countWar(p.ev.attacker, p.ev.defender);
-    WbVars v; v.A = p.ev.attackerName; v.D = p.ev.defenderName; v.T = p.ev.townName; v.H = wbTownName(p.home);
+    WbVars v; v.A = p.ev.attackerName; v.D = p.ev.defenderName; v.T = p.ev.townName; v.H = p.homeName;
     wbNews(wbLine(LINE_WAR_START, v).c_str());
     if (isVassal(p.ev.defender))
         wbNews(("Your vassals the " + p.ev.defenderName + " beg for your help at " + p.ev.townName + "!").c_str());
@@ -339,14 +352,14 @@ static void resolve(WarPlan& p, double now)
               e.id, chance, taken ? 1 : 0, e.playerHelpedAttacker, e.playerHelpedDefender);
     wbLogAlways(lb);
 
-    WbVars v; v.A = e.attackerName; v.D = e.defenderName; v.T = e.townName; v.H = wbTownName(p.home);
+    WbVars v; v.A = e.attackerName; v.D = e.defenderName; v.T = e.townName; v.H = p.homeName;
     if (taken)
     {
         e.town->setFaction(e.attacker, NULL);
         e.conquered = true;
         wbNews(wbLine(LINE_TOWN_FELL, v).c_str());
         FacMind* loser = mindOf(e.defender);
-        if (loser) { loser->grudge = e.attacker; loser->lostTown = e.town; loser->grudgeUntil = now + 90.0; }
+        if (loser) { loser->grudge = e.attacker; loser->lostTown = e.town; loser->lostTownName = e.townName; loser->grudgeUntil = now + 90.0; }
         if (e.attacker->relations) e.attacker->relations->affectRelations(e.defender, -15.0f, 1.0f);
         if (e.defender->relations) e.defender->relations->affectRelations(e.attacker, -25.0f, 1.0f);
         announceStrongest(false);
@@ -719,7 +732,7 @@ void wbWorldSave(std::vector<std::string>& out)
         if (!m.grudge || !m.lostTown || now >= m.grudgeUntil) continue;
         sprintf_s(b, sizeof(b), "%.1f", m.grudgeUntil - now);
         out.push_back(std::string("grudge\t") + b + "\t" + wbClean(wbFactionName(m.f)) + "\t" + wbClean(wbFactionName(m.grudge))
-                      + "\t" + wbClean(wbTownName(m.lostTown)));
+                      + "\t" + wbClean(m.lostTownName));
     }
 }
 void wbWorldLoad(const std::vector<std::string>& in)
@@ -744,7 +757,7 @@ void wbWorldLoad(const std::vector<std::string>& in)
             lektor<TownBase*>& towns = g->warMgr->myTowns;
             for (uint32_t k = 0; k < towns.size(); ++k)
                 if (towns[k] && wbTownName(towns[k]) == f[4])
-                { m->grudge = g; m->lostTown = towns[k]; m->grudgeUntil = now + atof(f[1].c_str()); break; }
+                { m->grudge = g; m->lostTown = towns[k]; m->lostTownName = f[4]; m->grudgeUntil = now + atof(f[1].c_str()); break; }
         }
     }
 }
