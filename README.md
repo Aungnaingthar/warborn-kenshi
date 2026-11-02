@@ -5,8 +5,27 @@ A Kingdom Come: Deliverance 2-style overhaul for Kenshi: grounded, skill-and-arm
 Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 
 **Status**
-- `main` branch: Phase 0, the unchanged Direct Control base. Build this first to check your toolchain.
-- `phase1-combat` branch: Phase 1, skill/armor damage + hit-stop + camera shake (`Warborn.cpp`). Settings are in the `[Warborn]` section of `WASDCombatPlugin.ini`.
+- `main` branch: Phase 0, the Direct Control base (builds and loads).
+- `phase1-combat` branch: Warborn combat. All settings are in the `[Warborn]` section of `WASDCombatPlugin.ini`.
+  - Skill/armor damage for every fighter, hit-stop and camera shake (`Warborn.cpp`)
+  - KCD 2 combat stance: lock-on, mouse attack/block, directional swings
+  - Realistic speed cap, so high skill never swings superhumanly fast
+  - No name/health bars over enemies
+
+## Controls (Warborn combat stance)
+
+| Key | Action |
+|---|---|
+| `R` | Enter / leave the combat stance (turns on Direct Control, manual combat and the action camera, and locks the nearest enemy) |
+| Left click | Attack |
+| Right click | Block: hold to guard, tap as a hit lands for a perfect block |
+| Move the mouse | Choose the swing: up = overhead, left, right, down = rising; keep still = thrust |
+| `TAB` | Lock the next enemy |
+| `Q` | Dodge |
+| `W A S D` | Move / circle the locked enemy |
+| `Alt` (hold) | Free cursor |
+
+All other Direct Control keys still work (see `upstream/DirectControl_README.md`).
 
 ## Credits and license
 
@@ -25,7 +44,5 @@ Like Direct Control and KenshiLib, Warborn is licensed under the **GNU GPLv3** (
    C:\KenshiMods\KenshiLib_Examples_deps   (git clone https://github.com/BFrizzleFoShizzle/KenshiLib_Examples_deps)
    ```
 3. Open `WASDCombatPlugin.sln`, choose **Release | x64**, and build. (Debug is broken in KenshiLib.)
-4. Copy the built `WASDCombatPlugin.dll` and `WASDCombatPlugin.ini` into `Kenshi/mods/WASDCombatPlugin/`. Also copy the `materials` folder from the official Direct Control release zip (it holds the first-person shader, and it isn't in the source repo).
-5. **Turn off the original Direct Control** (Workshop or manual) while testing, because two copies can't run at once.
-
-The project and DLL are renamed to Warborn after the first successful build, once we know the toolchain works.
+4. Double-click `Install-to-Kenshi.bat`. It copies the mod into `Kenshi\mods\Warborn` (backing up your old `.ini`).
+5. In the Kenshi launcher's **Mods** tab, tick **Warborn**. **Turn off the original Direct Control** if you have it, because two copies can't run at once.

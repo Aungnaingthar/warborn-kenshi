@@ -681,6 +681,87 @@ static Character*        s_aimLogged           = nullptr;// edge log
 static volatile ULONGLONG s_rmbAimPressMs      = 0;      // poll thread: RMB press edge
 static ULONGLONG         s_rmbAimSeenMs        = 0;
 static bool              s_aimClicked          = false;  // the current focus came from a click
+
+// ===================================================================
+// WARBORN COMBAT STANCE (KCD 2 style)
+// StanceKey (R) toggles it: Direct Control + manual combat + action camera
+// turn on, the nearest enemy is LOCKED and the camera follows them.  LMB =
+// attack, RMB = block (hold / tap), mouse flicks pick the swing direction
+// (the KCD 2 "star"), SwitchTargetKey (TAB) changes target.  Hold Alt for a
+// free cursor.  Poll thread writes the volatile edges; main thread owns the
+// rest.  All values live in the [Warborn] section of the .ini.
+// ===================================================================
+static int                s_wbStanceVk        = 'R';
+static int                s_wbSwitchVk        = VK_TAB;
+static bool               s_wbMouseCombat     = true;
+static bool               s_wbLockCamera      = true;
+static bool               s_wbDirectional     = true;
+static float              s_wbLockRange       = 60.0f;
+static float              s_wbLockBreakRange  = 90.0f;
+static float              s_wbCamFollow       = 8.0f;
+static float              s_wbFlickPx         = 14.0f;
+static float              s_wbDirResetMs      = 1500.0f;
+static bool               s_wbSpeedCap        = true;
+static float              s_wbAttackSpeedMax  = 1.35f;
+static float              s_wbBlockSpeedMax   = 1.35f;
+
+static volatile ULONGLONG s_wbStancePressMs   = 0;      // poll: stance key edge
+static ULONGLONG          s_wbStanceSeenMs    = 0;
+static volatile ULONGLONG s_wbSwitchPressMs   = 0;      // poll: switch-target key edge
+static ULONGLONG          s_wbSwitchSeenMs    = 0;
+static volatile bool      s_wbStanceOn        = false;  // stance active (poll reads it)
+static bool               s_wbStanceWant      = false;  // player asked for it (may wait for DC)
+static ULONGLONG          s_wbWantSinceMs     = 0;
+static bool               s_wbManualByUs      = false;  // we turned manual combat on
+static bool               s_wbCamByUs         = false;  // we turned the action camera on
+static Character*         s_wbLock            = nullptr;// locked enemy (identity; validated each frame)
+static volatile bool      s_wbMouseLive       = false;  // mouse buttons are combat buttons now
+static volatile bool      s_wbAltHeld         = false;  // poll: Alt = free cursor
+static ULONGLONG          s_wbNextAcquireMs   = 0;
+
+enum WbDir { WB_THRUST = 0, WB_OVERHEAD, WB_LEFT, WB_RIGHT, WB_RISING, WB_DIR_COUNT };
+static const char* const  WB_DIR_NAME[WB_DIR_COUNT] = { "THRUST", "OVERHEAD", "LEFT", "RIGHT", "RISING" };
+static int                s_wbDir             = WB_THRUST;
+static ULONGLONG          s_wbDirSetMs        = 0;
+static float              s_wbAccX            = 0.0f;
+static float              s_wbAccY            = 0.0f;
+static int                s_wbWantDir         = -1;     // direction for the next swing (-1 = any)
+static ULONGLONG          s_wbWantDirUntil    = 0;
+static ULONGLONG          s_wbLastAttackSeen  = 0;
+static ULONGLONG          s_wbLastFollowMs    = 0;
+static MyGUI::TextBox*    s_wbHud             = nullptr;
+static bool               s_wbHudTried        = false;
+static int                s_wbHudShown        = -2;
+
+// While locked, the mouse no longer turns the camera: it picks the swing
+// direction (screen space, y grows downward).  Called from the OTS mouse-look.
+static void wbFeedMouse(float dx, float dy)
+{
+    s_wbAccX = s_wbAccX * 0.8f + dx;
+    s_wbAccY = s_wbAccY * 0.8f + dy;
+    if (s_wbAccX * s_wbAccX + s_wbAccY * s_wbAccY < s_wbFlickPx * s_wbFlickPx) return;
+    int d;
+    if (fabsf(s_wbAccY) >= fabsf(s_wbAccX)) d = (s_wbAccY < 0.0f) ? WB_OVERHEAD : WB_RISING;
+    else                                    d = (s_wbAccX < 0.0f) ? WB_LEFT     : WB_RIGHT;
+    s_wbDir = d;
+    s_wbDirSetMs = GetTickCount64();
+    s_wbAccX = s_wbAccY = 0.0f;
+}
+// Current swing direction; falls back to a thrust after a quiet moment.
+static int wbCurrentDir()
+{
+    if (s_wbDir != WB_THRUST && GetTickCount64() - s_wbDirSetMs > (ULONGLONG)s_wbDirResetMs)
+        s_wbDir = WB_THRUST;
+    return s_wbDir;
+}
+static bool wbOwnsMouseLook() { return s_wbStanceOn && s_wbLockCamera && s_wbLock != nullptr; }
+static void wbCameraFollow();   // defined with the stance tick (needs the lock helpers)
+static void wbResetAll()
+{
+    s_wbStanceOn = false; s_wbStanceWant = false; s_wbManualByUs = false; s_wbCamByUs = false;
+    s_wbLock = nullptr; s_wbMouseLive = false; s_wbWantDir = -1; s_wbDir = WB_THRUST;
+    s_wbAccX = s_wbAccY = 0.0f;
+}
 // Markers are GUI-space (Kenshi's DX11 renderer needs shader materials for raw
 // 3D geometry).  ONE shared 64x64 soft-glow texture for every marker: the DX11
 // backend pads texture rows, so the old 24 px dot texture (96-byte rows) was
@@ -690,7 +771,7 @@ static bool              s_aimClicked          = false;  // the current focus ca
 static const int         GLOW_TEX_PX           = 64;
 static bool              s_glowTexTried        = false;
 static bool              s_glowTexOk           = false;
-static bool              s_settingAimName      = true;   // [Settings] AimNameTag
+static bool              s_settingAimName      = false;  // [Settings] AimNameTag (Warborn: off - no bars over enemies)
 // Aim-focus marker (user 2026-09-22): the enemy's NAME above their head, in the
 // game's own small text skin with a shadow - like the vanilla name tag - instead
 // of the glowing dot (the glow texture stays for the weapon glints).
@@ -1343,7 +1424,7 @@ static void writeDefaultConfig(const char* path)
         "; Aim focus with a free cursor: an enemy this many pixels from the cursor counts as pointed at.\r\n"
         "AimHoverPx             = 70\r\n"
         "; Aim focus marker: the name of the enemy you are pointing at, above their head.\r\n"
-        "AimNameTag             = true\r\n"
+        "AimNameTag             = false\r\n"
         "; Weapon glint: an enemy's weapon glints while their swing is coming at you\r\n"
         "; (brightens over GlintLeadMs, flashes at impact). Size in px.\r\n"
         "WeaponGlint            = true\r\n"
@@ -1657,7 +1738,7 @@ static void loadKeybinds()
             float dc = (float)atof(pbuf);
             if (dc < 0.0f) dc = 0.0f;      if (dc > 10000.0f) dc = 10000.0f;
             s_dodgeCooldownMs = dc;
-            GetPrivateProfileStringA("Settings", "AimNameTag", "true", pbuf, sizeof(pbuf), path);
+            GetPrivateProfileStringA("Settings", "AimNameTag", "false", pbuf, sizeof(pbuf), path);
             s_settingAimName = parseBool(pbuf, true);
             GetPrivateProfileStringA("Settings", "WeaponGlint", "true", pbuf, sizeof(pbuf), path);
             s_settingGlint = parseBool(pbuf, true);
@@ -2517,10 +2598,41 @@ static DWORD WINAPI PollThread(LPVOID)
             if (down) onPress(role);
         }
 
+        // WARBORN: stance / switch-target key edges, and mouse combat
+        // (LMB = attack press, RMB = block hold) while the stance owns the mouse.
+        // Read BEFORE the vanilla-click edges below so a quick click isn't lost
+        // (bit 0 = "pressed since the last poll").
+        bool wbMouseTaken = false;
+        {
+            static bool s_wbStancePrev = false, s_wbSwitchPrev = false, s_wbLPrev = false, s_wbRPrev = false;
+            bool sd = s_wbStanceVk > 0 && (GetAsyncKeyState(s_wbStanceVk) & 0x8000) != 0;
+            if (sd && !s_wbStancePrev && !s_camRotateUiOpen) s_wbStancePressMs = GetTickCount64();
+            s_wbStancePrev = sd;
+            bool sw = s_wbSwitchVk > 0 && (GetAsyncKeyState(s_wbSwitchVk) & 0x8000) != 0;
+            if (sw && !s_wbSwitchPrev && s_wbStanceOn) s_wbSwitchPressMs = GetTickCount64();
+            s_wbSwitchPrev = sw;
+            s_wbAltHeld = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+            wbMouseTaken = s_wbMouseLive && !s_wbAltHeld && !s_camRotateUiOpen;
+            if (wbMouseTaken)
+            {
+                SHORT ls = GetAsyncKeyState(VK_LBUTTON), rs = GetAsyncKeyState(VK_RBUTTON);
+                bool l = (ls & 0x8000) != 0, r = (rs & 0x8000) != 0;
+                if ((l && !s_wbLPrev) || (!l && (ls & 1))) s_attackPressMs = GetTickCount64();
+                if ((r && !s_wbRPrev) || (!r && (rs & 1))) s_blockPressMs  = GetTickCount64();
+                if (r != s_wbRPrev) s_blockHeld = r;
+                s_wbLPrev = l; s_wbRPrev = r;
+            }
+            else
+            {
+                if (s_wbRPrev) s_blockHeld = false;     // stance ended mid-block: let go
+                s_wbLPrev = s_wbRPrev = false;
+            }
+        }
+
         // RMB press edge — earliest player-click signal (see global note).
         {
             bool rmbDown = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
-            if (rmbDown && !s_rmbPrev)
+            if (rmbDown && !s_rmbPrev && !wbMouseTaken)   // WARBORN: RMB is Block in the stance
             {
                 s_rmbPressedEdge = true;
                 s_rmbAimPressMs  = GetTickCount64();   // right-click focus (manual combat)
@@ -2535,7 +2647,7 @@ static DWORD WINAPI PollThread(LPVOID)
         // double-click timestamp.
         {
             bool lmbDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-            if (lmbDown && !s_lmbPrev)
+            if (lmbDown && !s_lmbPrev && !wbMouseTaken)   // WARBORN: LMB is Attack in the stance
             {
                 ULONGLONG nowLB = GetTickCount64();
                 if (s_lastLmbDownMs > 0
@@ -2831,6 +2943,7 @@ static void otsRestoreNames();   // fwd decl — defined with the OTS camera cod
 static void clearAllState()
 {
     warbornReset(ou);        // WARBORN: drop pending hit-stop / shake
+    wbResetAll();            // WARBORN: combat stance off
     s_mode              = MODE_VANILLA;
     s_wHeld             = false;
     s_aHeld             = false;
@@ -5143,6 +5256,46 @@ static void manualAttackHudUpdate()
     else if (s_manualHud->getVisible()) s_manualHud->setVisible(false);
 }
 
+// WARBORN: stance HUD - one small line under the crosshair: the swing
+// direction while locked, or that no enemy is in reach.
+static void wbHudUpdate()
+{
+    bool want = s_wbStanceOn && s_mode == MODE_FREE_MOVE && !s_loadGuardActive;
+    if (want && !s_wbHud && !s_wbHudTried)
+    {
+        s_wbHudTried = true;
+        try
+        {
+            MyGUI::Gui* g = MyGUI::Gui::getInstancePtr();
+            MyGUI::IntSize v = MyGUI::RenderManager::getInstance().getViewSize();
+            if (g)
+                s_wbHud = g->createWidget<MyGUI::TextBox>("Kenshi_TextboxStandardText_Small",
+                              v.width / 2 - 90, v.height / 2 + 46, 180, 18, MyGUI::Align::Default, "Top", "wb_stance_hud");
+            if (s_wbHud)
+            {
+                s_wbHud->setTextAlign(MyGUI::Align::Center);
+                s_wbHud->setTextColour(MyGUI::Colour::White);
+                s_wbHud->setNeedMouseFocus(false);
+                s_wbHud->setVisible(false);
+            }
+        }
+        catch (...) { s_wbHud = nullptr; DebugLog("[Warborn] stance_hud_create_failed"); }
+    }
+    if (!s_wbHud) return;
+    if (!want) { if (s_wbHud->getVisible()) s_wbHud->setVisible(false); s_wbHudShown = -2; return; }
+    int show = !s_wbLock ? -1 : (s_wbDirectional ? wbCurrentDir() : WB_DIR_COUNT);
+    if (show != s_wbHudShown)
+    {
+        s_wbHudShown = show;
+        if (show == -1)                 s_wbHud->setCaption("no enemy in reach");
+        else if (show == WB_DIR_COUNT)  s_wbHud->setCaption("LOCKED");
+        else                            s_wbHud->setCaption(WB_DIR_NAME[show]);
+    }
+    MyGUI::IntSize v = MyGUI::RenderManager::getInstance().getViewSize();
+    s_wbHud->setPosition(v.width / 2 - 90, v.height / 2 + 46);
+    if (!s_wbHud->getVisible()) s_wbHud->setVisible(true);
+}
+
 static bool focusTargetLoaded(Character* t);   // fwd decl (manual combat, below)
 static bool focusTargetValid(Character* t);    // fwd decl (manual combat, below)
 
@@ -5951,7 +6104,9 @@ static void otsCamDrive(CameraClass* thisptr, bool uiOpen, int wheelPre)
                    { if (s_otsCursorCaptured) { dx = (float)(cur.x - center.x);
                        dy = (float)(cur.y - center.y); have = true; }
                      SetCursorPos(center.x, center.y); s_otsCursorCaptured = true; } }
-            if (have && (dx != 0.0f || dy != 0.0f))
+            if (have && (dx != 0.0f || dy != 0.0f) && wbOwnsMouseLook())
+                wbFeedMouse(dx, dy);               // WARBORN: locked - the mouse picks the swing direction
+            else if (have && (dx != 0.0f || dy != 0.0f))
             {
                 s_otsYaw   -= dx * FP_RAD_PER_PIXEL * s_fpSensitivityFP;
                 s_otsPitch -= dy * FP_RAD_PER_PIXEL * s_fpSensitivityFP;
@@ -5961,6 +6116,7 @@ static void otsCamDrive(CameraClass* thisptr, bool uiOpen, int wheelPre)
         }
     }
     else s_otsCursorCaptured = false;
+    wbCameraFollow();   // WARBORN: locked - ease the view onto the enemy
 
     // --- zoom: base from slider, wheel steps the session zoom (we own it) ---
     if (s_otsCamDistApplied != s_otsCamDist)
@@ -6219,6 +6375,7 @@ static void cameraUpdate_inner(CameraClass* thisptr, bool controlEnabled)
 
     s_cameraUpdateOrig(thisptr, ctlEnabled);
     manualAttackHudUpdate();    // "Manual Attack" label (self-gated)
+    wbHudUpdate();              // WARBORN: stance direction label (self-gated)
     focusMarkersUpdate(thisptr);   // lock dot + weapon glints (self-gated)
 
     // SCENE-FREEING — the Ogre scene is actively being torn down: only `!ou`
@@ -7892,6 +8049,7 @@ static void manualBlockTick()
     if (!ou || !ou->player || ou->isLoadingFromASaveGame() || s_dcPtrLossActive) return;   // build 74: no anchor deref while ANY load flag is up
     manualAttackTick();
     manualAimTick();
+    wbStanceTick();       // WARBORN: KCD 2 stance (lock overrides the aim focus)
     manualStaggerTick();
     manualDodgePressTick();
     manualAttackPressTick();
@@ -8076,6 +8234,225 @@ static Character* manualFoeResolve(CombatClass* cc, Character* me)
 {
     if (s_lockTarget && focusTargetValid(s_lockTarget)) return s_lockTarget;
     return manualAimPick(me, s_aimRange);
+}
+
+// ===================================================================
+// WARBORN COMBAT STANCE - main thread
+// ===================================================================
+// Best enemy to lock: nearest live hostile in reach, preferring the one in
+// front of the view.  `exclude` = skip (TAB switches away from it).
+static Character* wbPickFoe(Character* me, Character* exclude)
+{
+    if (!me || !me->movement || !s_gwFrame) return nullptr;
+    float yaw = 0.0f;
+    bool haveYaw = manualAimYaw(yaw);
+    const float fx = -sinf(yaw), fz = -cosf(yaw);
+    const Ogre::Vector3 mp = me->movement->pos;
+    const float maxR2 = s_wbLockRange * s_wbLockRange;
+    Character* best = nullptr; float bestScore = 1e9f;
+    auto& chars = s_gwFrame->getCharacterUpdateList();
+    for (auto it = chars.begin(); it != chars.end(); ++it)
+    {
+        Character* c = *it;
+        if (!c || c == me || c == exclude || !c->movement) continue;
+        float dx = c->movement->pos.x - mp.x, dz = c->movement->pos.z - mp.z;
+        float d2 = dx * dx + dz * dz;
+        if (d2 >= maxR2) continue;
+        if (c->isDead() || c->isUnconcious() || c->isDown() || !c->isEnemy(me, true)) continue;
+        float d = sqrtf(d2);
+        float cosA = (haveYaw && d > 0.01f) ? (dx * fx + dz * fz) / d : 0.0f;
+        float score = d * (1.6f - 0.6f * cosA);            // near first, in front preferred
+        if (score < bestScore) { bestScore = score; best = c; }
+    }
+    return best;
+}
+
+static void wbSetStance(bool on, const char* why)
+{
+    if (!on)
+    {
+        if (s_wbStanceOn)
+        {
+            if (s_wbManualByUs) s_manualAttackOn  = false;
+            if (s_wbCamByUs)    s_camRotateToggle = false;
+        }
+        bool was = s_wbStanceOn || s_wbStanceWant;
+        wbResetAll();
+        if (was) { char b[96]; sprintf_s(b, sizeof(b), "[Warborn] stance_off why=%s", why); DebugLog(b); }
+        return;
+    }
+    s_wbStanceWant  = true;
+    s_wbWantSinceMs = GetTickCount64();
+}
+
+// Once per frame (from manualBlockTick, after the aim focus so the lock wins).
+static void wbStanceTick()
+{
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG sp = s_wbStancePressMs;
+    if (sp != 0 && sp != s_wbStanceSeenMs)
+    {
+        s_wbStanceSeenMs = sp;
+        if (s_wbStanceWant || s_wbStanceOn) wbSetStance(false, "key");
+        else
+        {
+            wbSetStance(true, "key");
+            if (s_mode != MODE_FREE_MOVE && !s_userWantsDC) handleTogglePress();   // Direct Control first
+        }
+    }
+    if (s_wbStanceWant && !s_wbStanceOn)
+    {
+        if (s_mode == MODE_FREE_MOVE && s_freeMoveAnchor && !s_loadGuardActive && !s_dcShutdownInProgress)
+        {
+            s_wbStanceOn = true;
+            if (!s_manualAttackOn)  { s_manualAttackOn  = true; s_wbManualByUs = true; }
+            if (!s_camRotateToggle) { s_camRotateToggle = true; s_wbCamByUs    = true; }
+            s_wbDir = WB_THRUST; s_wbDirSetMs = now; s_wbNextAcquireMs = 0;
+            DebugLog("[Warborn] stance_on");
+        }
+        else if (now - s_wbWantSinceMs > 2500) wbSetStance(false, "direct_control_unavailable");
+    }
+    if (!s_wbStanceOn) { s_wbMouseLive = false; return; }
+    if (s_mode != MODE_FREE_MOVE || !s_freeMoveAnchor) { wbSetStance(false, "dc_off"); return; }
+    if (!s_manualAttackOn) { s_wbManualByUs = false; wbSetStance(false, "manual_off"); return; }
+
+    Character* me = s_freeMoveAnchor;
+    ULONGLONG tp = s_wbSwitchPressMs;                     // TAB: next enemy
+    if (tp != 0 && tp != s_wbSwitchSeenMs)
+    {
+        s_wbSwitchSeenMs = tp;
+        Character* n = wbPickFoe(me, s_wbLock);
+        if (n) { s_wbLock = n; DebugLog("[Warborn] lock_switch"); }
+    }
+    if (s_wbLock)                                         // keep, or let go
+    {
+        bool keep = focusTargetValid(s_wbLock) && !s_wbLock->isDown() && s_wbLock->movement && me->movement;
+        if (keep)
+        {
+            float dx = s_wbLock->movement->pos.x - me->movement->pos.x;
+            float dz = s_wbLock->movement->pos.z - me->movement->pos.z;
+            keep = dx * dx + dz * dz <= s_wbLockBreakRange * s_wbLockBreakRange;
+        }
+        if (!keep) { s_wbLock = nullptr; s_wbNextAcquireMs = now + 150; DebugLog("[Warborn] lock_lost"); }
+    }
+    if (!s_wbLock && now >= s_wbNextAcquireMs)            // next enemy, like KCD 2
+    {
+        s_wbNextAcquireMs = now + 250;
+        s_wbLock = wbPickFoe(me, nullptr);
+        if (s_wbLock) DebugLog("[Warborn] lock_set");
+    }
+    if (s_wbLock) { s_lockTarget = s_wbLock; s_aimClicked = true; }
+    s_wbMouseLive = s_wbMouseCombat && !dcUiWantsCursor();
+
+    ULONGLONG ap = s_attackPressMs;                       // remember the direction of each swing
+    if (ap != 0 && ap != s_wbLastAttackSeen)
+    {
+        s_wbLastAttackSeen = ap;
+        if (s_wbDirectional)
+        {
+            s_wbWantDir = wbCurrentDir();
+            s_wbWantDirUntil = now + 1500;
+            char b[64]; sprintf_s(b, sizeof(b), "[Warborn] swing_dir=%s", WB_DIR_NAME[s_wbWantDir]); VerbLog(b);
+        }
+    }
+}
+
+// Locked: ease the action camera's yaw onto the enemy (from otsCamDrive).
+static void wbCameraFollow()
+{
+    ULONGLONG now = GetTickCount64();
+    float dt = s_wbLastFollowMs ? (float)(now - s_wbLastFollowMs) / 1000.0f : 0.0f;
+    s_wbLastFollowMs = now;
+    if (dt > 0.1f) dt = 0.1f;
+    if (!wbOwnsMouseLook() || !s_freeMoveAnchor || !s_freeMoveAnchor->movement) return;
+    Character* t = s_wbLock;
+    if (!focusTargetLoaded(t) || !t->movement) return;
+    float dx = t->movement->pos.x - s_freeMoveAnchor->movement->pos.x;
+    float dz = t->movement->pos.z - s_freeMoveAnchor->movement->pos.z;
+    if (dx * dx + dz * dz < 1.0f) return;
+    float target = atan2f(-dx, -dz);                       // forward = (-sin yaw, 0, -cos yaw)
+    float diff = target - s_otsYaw;
+    while (diff >  3.14159265f) diff -= 6.2831853f;
+    while (diff < -3.14159265f) diff += 6.2831853f;
+    float k = s_wbCamFollow * dt; if (k > 1.0f) k = 1.0f;
+    s_otsYaw += diff * k;
+}
+
+// Directional attacks: when the stance has a wanted direction, re-roll the
+// game's own technique choice (same weapon, skill and range rules) until one
+// swings that way.  No match = the game's pick, so nothing ever breaks.
+static CombatTechniqueData* (*s_wbChooseAttackOrig)(CharStats*, float, float, CombatTechniqueData*, bool) = nullptr;
+static int s_wbChooseLogs = 0;
+static bool wbTechSwings(CombatTechniqueData* t, CutDirection d)
+{
+    if (!t) return false;
+    for (uint32_t i = 0; i < t->impactPoints.size(); ++i)
+        if (t->impactPoints[i].direction == d) return true;
+    return false;
+}
+static CutDirection wbDirToCut(int d)
+{
+    switch (d)
+    {
+        case WB_OVERHEAD: return CUT_DOWNWARD;
+        case WB_LEFT:     return CUT_LEFT;
+        case WB_RIGHT:    return CUT_RIGHT;
+        case WB_RISING:   return CUT_UPWARDS;
+        default:          return CUT_THRUST;
+    }
+}
+static CombatTechniqueData* wbChooseAttack_hook(CharStats* st, float range, float reach, CombatTechniqueData* last, bool stationary)
+{
+    CombatTechniqueData* r = s_wbChooseAttackOrig(st, range, reach, last, stationary);
+    if (!s_wbStanceOn || !s_wbDirectional || s_wbWantDir < 0 || !s_freeMoveAnchor
+        || s_freeMoveAnchor->getStats() != st)
+        return r;
+    if (GetTickCount64() > s_wbWantDirUntil) { s_wbWantDir = -1; return r; }
+    CutDirection want = wbDirToCut(s_wbWantDir);
+    CombatTechniqueData* pick = r;
+    bool hit = wbTechSwings(r, want);
+    for (int i = 0; i < 16 && !hit; ++i)
+    {
+        CombatTechniqueData* c = s_wbChooseAttackOrig(st, range, reach, last, stationary);
+        if (wbTechSwings(c, want)) { pick = c; hit = true; }
+    }
+    if (s_wbChooseLogs < 60)
+    {
+        ++s_wbChooseLogs;
+        char b[200];
+        sprintf_s(b, sizeof(b), "[Warborn] choose_attack want=%s matched=%d anim=%s",
+                  WB_DIR_NAME[s_wbWantDir], hit ? 1 : 0, pick ? pick->animation.c_str() : "?");
+        DebugLog(b);
+    }
+    return pick;
+}
+
+// Realistic speed: Kenshi lets high skill swing and block superhumanly fast.
+// Cap the game's attack/block speed result (everyone, NPCs too).  The first
+// values are logged; if they are not on the expected ~1.0 scale the cap
+// switches itself off rather than slowing everybody down.
+static float (*s_wbAtkSpeedOrig)(CharStats*, float, float, bool) = nullptr;
+static int   s_wbSpeedLogs   = 0;
+static bool  s_wbSpeedOdd    = false;
+static float wbAtkSpeed_hook(CharStats* st, float weightMult, float skill, bool isBlock)
+{
+    float v = s_wbAtkSpeedOrig(st, weightMult, skill, isBlock);
+    if (v > 5.0f && !s_wbSpeedOdd) { s_wbSpeedOdd = true; DebugLog("[Warborn] speed_scale_unexpected - speed cap disabled"); }
+    float outV = v;
+    if (s_wbSpeedCap && !s_wbSpeedOdd)
+    {
+        float cap = isBlock ? s_wbBlockSpeedMax : s_wbAttackSpeedMax;
+        if (outV > cap) outV = cap;
+    }
+    if (s_wbSpeedLogs < 40)
+    {
+        ++s_wbSpeedLogs;
+        char b[128];
+        sprintf_s(b, sizeof(b), "[Warborn] speed %s skill=%.0f weight=%.2f raw=%.2f used=%.2f",
+                  isBlock ? "block" : "attack", skill, weightMult, v, outV);
+        DebugLog(b);
+    }
+    return outV;
 }
 
 // Aim focus with a FREE cursor: the live hostile whose chest projects nearest
@@ -11281,6 +11658,13 @@ static void playerControl_hook(PlayerInterface* thisptr, InputHandler& k)
                     DebugLog("[WASDCombat] free_camera_input_suppressed_dc"); }
         }
     }
+    // WARBORN: in the combat stance the mouse buttons are Attack / Block -
+    // the game must not also select, deselect or give move/attack orders.
+    if (s_wbMouseLive && !s_wbAltHeld && !dcUiWantsCursor())
+    {
+        k.mLeft = k.mRight = k.mLDown = k.mRDown = k.mLUp = k.mRUp = false;
+        k.lastMLeft = k.lastMRight = false;
+    }
     s_playerControlOrig(thisptr, k);
 
     if (s_mode == MODE_FREE_MOVE
@@ -11968,6 +12352,52 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
     return TRUE;
 }
 
+// WARBORN: stance settings ([Warborn] section).
+static float wbIniF(const char* path, const char* key, float d)
+{
+    char def[32], buf[64]; sprintf_s(def, sizeof(def), "%g", d);
+    GetPrivateProfileStringA("Warborn", key, def, buf, sizeof(buf), path);
+    return (float)atof(buf);
+}
+static bool wbIniB(const char* path, const char* key, bool d)
+{
+    char buf[16]; GetPrivateProfileStringA("Warborn", key, d ? "true" : "false", buf, sizeof(buf), path);
+    for (char* q = buf; *q; ++q) *q = (char)tolower((unsigned char)*q);
+    if (!strcmp(buf, "true") || !strcmp(buf, "1") || !strcmp(buf, "yes") || !strcmp(buf, "on"))  return true;
+    if (!strcmp(buf, "false") || !strcmp(buf, "0") || !strcmp(buf, "no") || !strcmp(buf, "off")) return false;
+    return d;
+}
+static int wbIniKey(const char* path, const char* key, const char* d)
+{
+    char buf[32]; GetPrivateProfileStringA("Warborn", key, d, buf, sizeof(buf), path);
+    int vk = parseKeyName(buf);
+    if (vk <= 0) vk = parseKeyName(d);
+    return vk;
+}
+static void wbLoadStanceConfig(const char* path)
+{
+    s_wbStanceVk       = wbIniKey(path, "StanceKey",       "R");
+    s_wbSwitchVk       = wbIniKey(path, "SwitchTargetKey", "TAB");
+    s_wbMouseCombat    = wbIniB(path, "MouseCombat",       s_wbMouseCombat);
+    s_wbLockCamera     = wbIniB(path, "LockCamera",        s_wbLockCamera);
+    s_wbDirectional    = wbIniB(path, "DirectionalAttacks", s_wbDirectional);
+    s_wbLockRange      = wbIniF(path, "LockRange",         s_wbLockRange);
+    s_wbLockBreakRange = wbIniF(path, "LockBreakRange",    s_wbLockBreakRange);
+    s_wbCamFollow      = wbIniF(path, "CameraFollow",      s_wbCamFollow);
+    s_wbFlickPx        = wbIniF(path, "DirectionFlickPx",  s_wbFlickPx);
+    s_wbDirResetMs     = wbIniF(path, "DirectionResetMs",  s_wbDirResetMs);
+    s_wbSpeedCap       = wbIniB(path, "RealisticSpeed",    s_wbSpeedCap);
+    s_wbAttackSpeedMax = wbIniF(path, "AttackSpeedMax",    s_wbAttackSpeedMax);
+    s_wbBlockSpeedMax  = wbIniF(path, "BlockSpeedMax",     s_wbBlockSpeedMax);
+    if (s_wbLockBreakRange < s_wbLockRange) s_wbLockBreakRange = s_wbLockRange;
+    if (s_wbFlickPx < 2.0f) s_wbFlickPx = 2.0f;
+    char b[200];
+    sprintf_s(b, sizeof(b), "[Warborn] stance stanceKey=%d switchKey=%d mouse=%d lockCam=%d directional=%d speedCap=%d(%.2f/%.2f)",
+              s_wbStanceVk, s_wbSwitchVk, s_wbMouseCombat ? 1 : 0, s_wbLockCamera ? 1 : 0, s_wbDirectional ? 1 : 0,
+              s_wbSpeedCap ? 1 : 0, s_wbAttackSpeedMax, s_wbBlockSpeedMax);
+    DebugLog(b);
+}
+
 __declspec(dllexport) void startPlugin()
 {
     // SINGLE-INSTANCE GUARD (build 54; field 2026-09-26): the Workshop release
@@ -11999,6 +12429,7 @@ __declspec(dllexport) void startPlugin()
         char wbPath[MAX_PATH];
         getConfigPath(wbPath, sizeof(wbPath));
         warbornLoadConfig(wbPath);
+        wbLoadStanceConfig(wbPath);
     }
 
     // Native Controls-menu keybinds (KEP pattern) — all three hooks are
@@ -12192,6 +12623,22 @@ __declspec(dllexport) void startPlugin()
         ErrorLog("WASDCombatPlugin: chooseBlock hook FAILED - manual attack mode cannot silence AI blocks");
     else
         DebugLog("WASDCombatPlugin: chooseBlock hook OK");
+    // WARBORN: directional attacks + realistic speed cap
+    if (KenshiLib::SUCCESS != KenshiLib::AddHook(
+            KenshiLib::GetRealAddress(&CharStats::chooseAttack),
+            &wbChooseAttack_hook, &s_wbChooseAttackOrig))
+        ErrorLog("Warborn: chooseAttack hook FAILED - directional attacks off");
+    else
+        DebugLog("Warborn: chooseAttack hook OK");
+    {
+        intptr_t sp = dcResolveKenshiLibExport("?calculateAttackOrBlockSpeed@CharStats@@IEAAMMM_N@Z");
+        if (!sp)
+            ErrorLog("Warborn: calculateAttackOrBlockSpeed export not found - speed cap off");
+        else if (KenshiLib::SUCCESS != KenshiLib::AddHook(sp, &wbAtkSpeed_hook, &s_wbAtkSpeedOrig))
+            ErrorLog("Warborn: calculateAttackOrBlockSpeed hook FAILED - speed cap off");
+        else
+            DebugLog("Warborn: calculateAttackOrBlockSpeed hook OK");
+    }
     if (KenshiLib::SUCCESS != KenshiLib::AddHook(
             KenshiLib::GetRealAddress(DcRobResult<DcSetCombatStateTag>::ptr),
             &setCombatState_hook, &s_setCombatStateOrig))
