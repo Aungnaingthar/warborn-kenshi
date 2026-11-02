@@ -26,6 +26,8 @@
 #include <kenshi/FactionRelations.h>
 #include <kenshi/Enums.h>
 #include <kenshi/util/hand.h>
+#include <kenshi/RootObject.h>
+#include <ogre/OgreMemoryAllocatorConfig.h>
 #include <ogre/OgreVector3.h>
 
 #define WIN32_LEAN_AND_MEAN
@@ -203,9 +205,36 @@ static Character* firstConsciousPlayerChar()
     return NULL;
 }
 
+Character* wbSelectedPerson()
+{
+    if (!ou || !ou->player) return NULL;
+    lektor<RootObject*> sel;
+    ou->player->getAllSelectedObjects(sel, CHARACTER);
+    Character* stranger = NULL;
+    for (uint32_t i = 0; i < sel.size(); ++i)
+    {
+        Character* c = static_cast<Character*>(sel[i]);
+        if (c && !c->isPlayerCharacter()) { stranger = c; break; }
+    }
+    if (sel.stuff) Ogre::CategorisedAllocPolicy<Ogre::MEMCATEGORY_GENERAL>::deallocateBytes(sel.stuff);
+    char lb[96]; sprintf_s(lb, sizeof(lb), "[Warborn] selected: %u objects, stranger=%d", sel.size(), stranger ? 1 : 0); wbLog(lb);
+    if (stranger) return stranger;
+    return ou->player->selectedCharacter.getCharacter();
+}
+
+// Kenshi's own recruit (the same as recruiting through dialogue); our
+// fallback only if the game says no.
+static bool joinBand(Character* c, Character* leader)
+{
+    bool ok = ou->player->recruit(c, false);
+    if (!ok || !c->isPlayerCharacter()) { c->setFaction(wbPlayerFaction(), leader->getPlatoon()); ok = c->isPlayerCharacter(); }
+    char lb[96]; sprintf_s(lb, sizeof(lb), "[Warborn] join band ok=%d", ok ? 1 : 0); wbLogAlways(lb);
+    return ok;
+}
+
 static void tryRecruit()
 {
-    Character* c = ou->player->selectedCharacter.getCharacter();
+    Character* c = wbSelectedPerson();
     if (!c) { wbToast("Click a person to select them, then press the recruit key."); return; }
     if (c->isPlayerCharacter()) { wbToast("They already ride with you."); return; }
     if (c->isDead()) { wbToast("The dead don't follow anyone."); return; }
@@ -217,7 +246,7 @@ static void tryRecruit()
     {
         Faction* of = c->getFaction();
         std::string pn = c->getName();
-        c->setFaction(pf, leader->getPlatoon());
+        joinBand(c, leader);
         wbFollowerJoined(c, of, true);
         if (of && !wbIsPlayerFaction(of)) wbGiveRep(of, -5.0f, "for taking one of theirs prisoner");
         wbNews((pn + " has been taken prisoner and put to work. They'll try to escape until they come to trust you.").c_str());
@@ -257,7 +286,7 @@ static void tryRecruit()
         char b[300]; sprintf_s(b, sizeof(b), "%s  (chance %d%%)", wbLine(LINE_RECRUIT_NO, v).c_str(), (int)(chance * 100.0f));
         wbToast(b); return;
     }
-    c->setFaction(pf, leader->getPlatoon());
+    joinBand(c, leader);
     wbFollowerJoined(c, vf, false);
     if (g_wbRecruitShift) { wbWarbandAdd(c); wbNews((name + " joins your warband - yours to command, not to control. " + wbLine(LINE_RECRUIT_YES, v)).c_str()); }
     else wbNews((name + " has joined your band! " + wbLine(LINE_RECRUIT_YES, v)).c_str());

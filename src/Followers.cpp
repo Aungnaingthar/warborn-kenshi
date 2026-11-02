@@ -296,7 +296,7 @@ static std::string fillX(const char* s)
 
 static void talk()
 {
-    Character* c = ou->player->selectedCharacter.getCharacter();
+    Character* c = wbSelectedPerson();
     if (!c) { wbToast("Click someone to select them, then press the talk key."); return; }
     if (c->isDead()) { wbToast("The dead keep their secrets."); return; }
     if (c->isUnconcious()) { wbToast("They're out cold."); return; }
