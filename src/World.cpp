@@ -73,6 +73,8 @@ static void refreshMinds()
     }
 }
 
+static bool isVassal(Faction* f);      // your vassals (below)
+
 // ------------------------------------------------------------ towns
 static bool townStillExists(TownBase* t, Faction** ownerOut)
 {
@@ -233,7 +235,7 @@ static bool pickTarget(FacMind& m, double now, TownBase** townOut, Faction** def
     {
         Faction* g = s_minds[i].f;
         if (!g || g == me || !g->warMgr) continue;
-        if (g == pf && !g_wb.attackPlayerTowns) continue;
+        if (g == pf && (!g_wb.attackPlayerTowns || isVassal(me))) continue;   // vassals never march on you
         if (!me->relations->isEnemy(g)) continue;
         if (atPeace(me, g)) continue;                       // truce or coalition partner
         bool coalitionTarget = (coalitionEnemy(me) == g);
@@ -295,6 +297,8 @@ static void launch(WarPlan& p, double now)
     countWar(p.ev.attacker, p.ev.defender);
     WbVars v; v.A = p.ev.attackerName; v.D = p.ev.defenderName; v.T = p.ev.townName; v.H = wbTownName(p.home);
     wbNews(wbLine(LINE_WAR_START, v).c_str());
+    if (isVassal(p.ev.defender))
+        wbNews(("Your vassals the " + p.ev.defenderName + " beg for your help at " + p.ev.townName + "!").c_str());
     wbContractsOnWarStarted(p.ev);
 }
 
@@ -432,6 +436,99 @@ static void diplomacy(double now)
     }
 }
 
+// ------------------------------------------------------------ your rank and your vassals
+// Your standing as a power grows with the towns you hold and your renown.
+// From Lordship on, small factions that love you may swear fealty: vassals
+// pay tribute, call on you when attacked, and rebel if they stop liking you.
+struct RankStep { int at; const char* name; };
+static const RankStep RANKS[] = { { 0, "Wandering Band" }, { 25, "Free Company" }, { 60, "Lordship" },
+                                  { 120, "Realm" }, { 220, "Kingdom" } };
+static const int RANK_COUNT = (int)(sizeof(RANKS) / sizeof(RANKS[0]));
+static int s_rank = 0;
+static std::vector<Faction*> s_vassals;
+static std::vector<std::string> s_vassalNames;          // restored by name after a load
+static double s_nextFealty = 10.0;
+
+static int rankScore() { return 10 * wbTownCount(wbPlayerFaction()) + (int)wbRenown(); }
+static bool isVassal(Faction* f)
+{
+    for (size_t i = 0; i < s_vassals.size(); ++i) if (s_vassals[i] == f) return true;
+    return false;
+}
+
+static void realm(double now)
+{
+    Faction* pf = wbPlayerFaction();
+    if (!pf) return;
+    if (!s_vassalNames.empty())
+    {
+        for (size_t i = 0; i < s_vassalNames.size(); ++i) { Faction* f = wbFindFaction(s_vassalNames[i]); if (f && !isVassal(f)) s_vassals.push_back(f); }
+        s_vassalNames.clear();
+    }
+    int r = 0, score = rankScore();
+    while (r + 1 < RANK_COUNT && score >= RANKS[r + 1].at) ++r;
+    if (r > s_rank)
+    {
+        s_rank = r;
+        wbNews(("Your power grows: you now lead a " + std::string(RANKS[r].name) + ".").c_str());
+    }
+    else if (r < s_rank) s_rank = r;
+    if (now < s_nextFealty) return;
+    s_nextFealty = now + 10.0;
+    // tribute, loyalty and rebellion
+    for (size_t i = 0; i < s_vassals.size(); )
+    {
+        Faction* v = s_vassals[i];
+        float rel = (v && v->relations) ? v->relations->getFactionRelation(pf) : -100.0f;
+        if (!v || !v->relations || v->relations->isEnemy(pf) || rel < 10.0f || wbTownCount(v) == 0)
+        {
+            wbNews(("The " + wbFactionName(v) + " have thrown off your rule. They are your vassals no more!").c_str());
+            s_vassals.erase(s_vassals.begin() + i);
+            continue;
+        }
+        int tribute = 150 * wbTownCount(v) * (s_rank >= 3 ? 2 : 1);
+        wbPayPlayer(tribute);
+        v->relations->affectRelations(pf, 1.5f, 1.0f);
+        char b[160]; sprintf_s(b, sizeof(b), "The %s pay their tribute: %d cats.", wbFactionName(v).c_str(), tribute);
+        wbToast(b);
+        ++i;
+    }
+    // fealty: a small faction that loves you asks to serve
+    if (s_rank < 2) return;
+    for (size_t i = 0; i < s_minds.size(); ++i)
+    {
+        Faction* f = s_minds[i].f;
+        if (!f || f == pf || !f->relations || isVassal(f)) continue;
+        int towns = wbTownCount(f);
+        if (towns < 1 || towns > 2 || f->relations->isEnemy(pf)) continue;
+        if (f->relations->getFactionRelation(pf) < 40.0f || wbRand01() > 0.3f) continue;
+        s_vassals.push_back(f);
+        wbNews(("The " + wbFactionName(f) + " swear fealty to you. They are now your vassals.").c_str());
+        wbAddRenown(4.0f, "a new vassal");
+        return;
+    }
+}
+
+std::string wbRealmSummary()
+{
+    std::string out = "YOUR RANK: " + std::string(RANKS[s_rank].name);
+    char b[96];
+    if (s_rank + 1 < RANK_COUNT)
+    {
+        sprintf_s(b, sizeof(b), " (power %d, next: %s at %d - hold towns, win fame)", rankScore(), RANKS[s_rank + 1].name, RANKS[s_rank + 1].at);
+        out += b;
+    }
+    out += "\n";
+    if (s_vassals.empty()) out += s_rank >= 2 ? "  No vassals yet. Small factions that love you may swear fealty.\n"
+                                              : "  Vassals swear fealty to a Lordship or greater.\n";
+    for (size_t i = 0; i < s_vassals.size(); ++i)
+    {
+        sprintf_s(b, sizeof(b), "  Vassal: %s (%d towns)\n", wbFactionName(s_vassals[i]).c_str(), wbTownCount(s_vassals[i]));
+        out += b;
+    }
+    return out;
+}
+
 std::string wbDiplomacySummary()
 {
     double now = wbWorldMinutes();
@@ -463,6 +560,7 @@ void wbWorldFrame()
         refreshMinds();
         if (!s_strongestKnown && !s_minds.empty()) announceStrongest(true);
     }
+    realm(now);
     if (now >= s_nextDiplomacy)
     {
         s_nextDiplomacy = now + 5.0;
@@ -504,6 +602,7 @@ void wbWorldOnFelled(Faction* victimFaction, float x, float z)
 void wbWorldReset()
 {
     s_minds.clear(); s_plans.clear(); s_pacts.clear(); s_pairWars.clear(); s_nextDiplomacy = 3.0;
+    s_rank = 0; s_vassals.clear(); s_vassalNames.clear(); s_nextFealty = 10.0;
     s_nextMindRefresh = 0.0; s_nextPlanAt = 1.0;
     s_strongest = NULL; s_strongestKnown = false;
 }
@@ -605,6 +704,7 @@ void wbWorldSave(std::vector<std::string>& out)
 {
     double now = wbWorldMinutes();
     char b[64];
+    for (size_t i = 0; i < s_vassals.size(); ++i) out.push_back("vassal\t" + wbClean(wbFactionName(s_vassals[i])));
     for (size_t i = 0; i < s_pacts.size(); ++i)
     {
         const Pact& p = s_pacts[i];
@@ -629,6 +729,7 @@ void wbWorldLoad(const std::vector<std::string>& in)
     for (size_t i = 0; i < in.size(); ++i)
     {
         std::vector<std::string> f = wbSplit(in[i]);
+        if (f[0] == "vassal" && f.size() >= 2) { s_vassalNames.push_back(f[1]); continue; }
         if (f[0] == "pact" && f.size() >= 6)
         {
             Pact p; p.kind = atoi(f[1].c_str()); p.until = now + atof(f[2].c_str());

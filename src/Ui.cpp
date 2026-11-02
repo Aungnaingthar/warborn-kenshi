@@ -237,7 +237,7 @@ static void buildBody()
     switch (s_tab)
     {
         case 0: t = "NEWS FROM MESSENGERS AND TOWN CRIERS\n\n" + newsText(); break;
-        case 1: t = wbWarbandSummary() + "\nTRAINING\n" + wbTrainingSummary() + "\nWARS\n" + wbWorldSummary() + "\nPACTS\n" + wbDiplomacySummary()
+        case 1: t = wbRealmSummary() + "\n" + wbWarbandSummary() + "\nTRAINING\n" + wbTrainingSummary() + "\nWARS\n" + wbWorldSummary() + "\nPACTS\n" + wbDiplomacySummary()
                   + "\nTHE POWERS OF THE LAND (towns held)\n" + wbPowerRanking(); break;
         case 2: t = wbContractsSummary(); break;
         case TAB_PEOPLE: t = wbFollowersSummary() + "\n" + wbOriginSummary(); break;

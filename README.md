@@ -39,6 +39,7 @@ Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 | **Trade** | Contracts pay cats. Caravan contracts: invest now, get your share back with profit if their towns stay safe. |
 | **Age and marriage** | Everyone ages; old fighters weaken and can die of old age. **M** marries two of your people (more loyal together; they grieve if one dies). |
 | **Easier smithing** | Smithing skills learn 3× faster (adjustable). |
+| **Rank and vassals** | Your power grows with towns and fame: Wandering Band, Free Company, Lordship, Realm, Kingdom. From Lordship on, small friendly factions may swear fealty, pay tribute and call for help, and they rebel if they stop liking you. |
 
 ## Controls
 
