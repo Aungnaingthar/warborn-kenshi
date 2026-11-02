@@ -144,6 +144,10 @@ void wbLoadConfig(const char* path)
     g_wb.warbandKeys[2]    = iniKey(path, "WarbandPatrolKey", "I");
     g_wb.warbandKeys[3]    = iniKey(path, "WarbandReturnKey", "O");
     g_wb.playerConquest    = iniB(path, "PlayerConquest",    true);
+    g_wb.trainKey          = iniKey(path, "TrainKey",        "T");
+    g_wb.sparDamage        = iniF(path, "SparDamage",        0.35f);
+    g_wb.sparSeconds       = iniF(path, "SparSeconds",       90.0f);
+    g_wb.sparXp            = iniF(path, "SparXp",            1.0f);
     if (g_wb.maxWars < 1) g_wb.maxWars = 1;
     if (g_wb.warIntervalMin < 0.5f) g_wb.warIntervalMin = 0.5f;
     if (g_wb.resolveMin < 1.0f) g_wb.resolveMin = 1.0f;
@@ -179,6 +183,7 @@ static bool keyPressed(int vk)
 bool g_wbRecruitPressed = false;
 bool g_wbCmdPressed[4]  = { false, false, false, false };
 bool g_wbWarbandKeys[4] = { false, false, false, false };
+bool g_wbTrainPressed = false, g_wbTournamentPressed = false;
 static volatile bool s_journalTogglePending = false;
 
 static void pollKeys()
@@ -188,6 +193,10 @@ static void pollKeys()
     g_wbRecruitPressed = keyPressed(g_wb.recruitKey) && fg && !textInput;
     for (int i = 0; i < 4; ++i) g_wbCmdPressed[i] = keyPressed(g_wb.cmdKeys[i]) && fg;
     for (int i = 0; i < 4; ++i) g_wbWarbandKeys[i] = keyPressed(g_wb.warbandKeys[i]) && fg && !textInput;
+    bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    bool train = keyPressed(g_wb.trainKey) && fg && !textInput;
+    g_wbTrainPressed = train && !shift;
+    g_wbTournamentPressed = train && shift;
     if (keyPressed(g_wb.journalKey) && fg && !textInput) s_journalTogglePending = true;
 }
 
@@ -206,6 +215,7 @@ static void resetAll(const char* why)
     wbPeopleReset();
     wbContractsReset();
     wbWarbandReset();
+    wbTrainingReset();
     wbUiReset();
     s_worldMinutes = 0.0;
     char b[96]; sprintf_s(b, sizeof(b), "[Warborn] reset (%s)", why); DebugLog(b);
@@ -242,6 +252,7 @@ static void mainLoop_hook(GameWorld* thisptr, float time)
     wbPeopleFrame();
     wbContractsFrame();
     wbWarbandFrame();
+    wbTrainingFrame();
     wbUiMainFrame();
 }
 
@@ -268,7 +279,7 @@ static HitMaterialType iHit_hook(CombatClass* cc, CutDirection dir, Damages& dam
 {
     Character* victim = cc ? cc->me : NULL;
     bool wasDown = victim && (victim->isDead() || victim->isUnconcious() || victim->isDown());
-    if (victim && who) wbCombatBeforeHit(victim, who, damage);
+    if (victim && who) { wbCombatBeforeHit(victim, who, damage); wbTrainingScaleHit(victim, who, damage); }
     HitMaterialType r = s_iHitOrig(cc, dir, damage, who);
     if (victim && who && s_wasLive && !wasDown && who->isPlayerCharacter()
         && (victim->isDead() || victim->isUnconcious() || victim->isDown()))
@@ -322,6 +333,7 @@ __declspec(dllexport) void startPlugin()
     strcat_s(path, sizeof(path), "Warborn.ini");
     wbLoadConfig(path);
     wbPersistInstall(folder);
+    wbTrainingInit();
     wbCombatInstall(path);
     wbBattleInstall(path);
 

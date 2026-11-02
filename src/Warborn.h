@@ -47,6 +47,11 @@ struct WbConfig
     // warband (command-only missions)
     int   warbandKeys[4];       // add/remove, take a place, patrol, return
     bool  playerConquest;       // a place your warband clears becomes yours
+    // training
+    int   trainKey;             // T = spar, Shift+T = tournament
+    float sparDamage;           // damage multiplier in a spar
+    float sparSeconds;
+    float sparXp;
     // ui
     int   journalKey;
 };
@@ -148,6 +153,14 @@ void wbWarbandFrame();
 void wbWarbandReset();
 std::string wbWarbandSummary();
 void wbWarbandSave(std::vector<std::string>& out);   void wbWarbandLoad(const std::vector<std::string>& in);
+
+// ------------------------------------------------------------ training (Training.cpp)
+void wbTrainingInit();
+void wbTrainingFrame();
+void wbTrainingReset();
+std::string wbTrainingSummary();
+// Any thread: blunt the blows between two sparring partners.
+void wbTrainingScaleHit(Character* victim, Character* attacker, Damages& damage);
 
 // ------------------------------------------------------------ contracts
 void wbContractsFrame();
