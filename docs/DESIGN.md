@@ -52,6 +52,11 @@ A living-world overhaul for Kenshi, built as an RE_Kenshi plugin with KenshiLib.
 - **Saving** per save game.
 
 ## Roadmap (requested next)
+- **Start options:** origins such as Noble, Exile, Merchant, Slave, Clan Warrior. Each sets starting standing, gear, followers and story hooks.
+- **Talk to anyone:** a Warborn talk window with lines that depend on the person's faction, mood, traits and your relationship (ask for news, rumours, work, join, threaten, bribe).
+- **Relationships and loyalty:** a personal bond score with each of your people. Loyalty comes from the bond **or** from shared origin (same faction or clan). **Traits** (Loyal, Greedy, Ambitious, Coward, Zealot...) decide how likely **betrayal** is: deserting, stealing or switching sides, rare or common depending on trait and bond.
+- **Children:** couples among your people can have a child who appears as a young adult (no child models in Kenshi).
+- **Easier smithing:** faster crafting and better quality at lower skill (settings).
 - **Two kinds of recruits:** join your squad (you control them) *or* join your warband (you only command them). Ask at recruit time.
 - **Trade:** factions you're friendly with offer better prices; caravans between towns; trade contracts.
 - **Prisoners:** capture, imprison and put prisoners to work (Kenshi has slave-labour tasks to build on).
