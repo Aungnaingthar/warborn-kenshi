@@ -122,6 +122,49 @@ static double s_nextPlanAt  = 1.0;
 static Faction* s_strongest = NULL;
 static bool   s_strongestKnown = false;
 
+// ------------------------------------------------------------ diplomacy
+// Pacts are Warborn's own agreements between NPC factions (the game's base
+// relations are left alone, so nothing breaks when a pact ends):
+//   TRUCE     - two factions worn out by repeated wars stop attacking each other.
+//   COALITION - when one power grows too big, two of its enemies join forces
+//               against it: they won't fight each other and go after its towns.
+enum { PACT_TRUCE = 0, PACT_COALITION = 1 };
+struct Pact { Faction* a; Faction* b; int kind; double until; Faction* against; };
+static std::vector<Pact> s_pacts;
+struct PairWars { Faction* a; Faction* b; int wars; double last; };
+static std::vector<PairWars> s_pairWars;
+static double s_nextDiplomacy = 3.0;
+
+static bool samePair(Faction* a, Faction* b, Faction* x, Faction* y) { return (a == x && b == y) || (a == y && b == x); }
+static Pact* findPact(Faction* a, Faction* b, int kind)
+{
+    double now = wbWorldMinutes();
+    for (size_t i = 0; i < s_pacts.size(); ++i)
+        if (s_pacts[i].kind == kind && now < s_pacts[i].until && samePair(s_pacts[i].a, s_pacts[i].b, a, b)) return &s_pacts[i];
+    return NULL;
+}
+static bool atPeace(Faction* a, Faction* b) { return findPact(a, b, PACT_TRUCE) || findPact(a, b, PACT_COALITION); }
+static Faction* coalitionEnemy(Faction* f)
+{
+    double now = wbWorldMinutes();
+    for (size_t i = 0; i < s_pacts.size(); ++i)
+        if (s_pacts[i].kind == PACT_COALITION && now < s_pacts[i].until && (s_pacts[i].a == f || s_pacts[i].b == f))
+            return s_pacts[i].against;
+    return NULL;
+}
+static void countWar(Faction* a, Faction* b)
+{
+    double now = wbWorldMinutes();
+    for (size_t i = 0; i < s_pairWars.size(); ++i)
+        if (samePair(s_pairWars[i].a, s_pairWars[i].b, a, b))
+        {
+            if (now - s_pairWars[i].last > 60.0) s_pairWars[i].wars = 0;   // old wars are forgotten
+            ++s_pairWars[i].wars; s_pairWars[i].last = now; return;
+        }
+    PairWars p; p.a = a; p.b = b; p.wars = 1; p.last = now;
+    s_pairWars.push_back(p);
+}
+
 static bool isTargeted(TownBase* t)
 {
     for (size_t i = 0; i < s_plans.size(); ++i) if (s_plans[i].ev.town == t) return true;
@@ -156,6 +199,7 @@ static FacMind* pickAggressor(double now)
         float wt = m.aggression * (1.0f + 0.15f * (float)towns);
         if (towns <= 2) wt *= 1.5f;                              // a small clan with big dreams
         if (m.grudge && now < m.grudgeUntil) wt *= 2.5f;          // revenge burns
+        if (coalitionEnemy(m.f)) wt *= 1.5f;                      // the coalition is on the march
         w[i] = wt; total += wt;
     }
     if (total <= 0.0f) return NULL;
@@ -190,6 +234,8 @@ static bool pickTarget(FacMind& m, double now, TownBase** townOut, Faction** def
         if (!g || g == me || !g->warMgr) continue;
         if (g == pf && !g_wb.attackPlayerTowns) continue;
         if (!me->relations->isEnemy(g)) continue;
+        if (atPeace(me, g)) continue;                       // truce or coalition partner
+        bool coalitionTarget = (coalitionEnemy(me) == g);
         lektor<TownBase*>& towns = g->warMgr->myTowns;
         bool distracted = isDefending(g) || isAttacking(g);
         for (uint32_t k = 0; k < towns.size(); ++k)
@@ -199,12 +245,14 @@ static bool pickTarget(FacMind& m, double now, TownBase** townOut, Faction** def
             float d = distXZ(t->getPosition(), from);
             float score = d / 5000.0f + 1.5f * (float)wbTownCount(g) + 2.0f * wbRand01();
             if (distracted) score -= 3.0f;
+            if (coalitionTarget) score -= 5.0f;                 // the coalition's sworn enemy
             if (score < bestScore) { bestScore = score; best = t; bestDef = g; bestOpp = distracted; }
         }
     }
     if (!best) return false;
     *townOut = best; *defOut = bestDef;
-    *reasonOut = bestOpp ? "while their enemy is busy fighting elsewhere" : "to grow their power";
+    if (coalitionEnemy(me) == bestDef) *reasonOut = "as the coalition swore";
+    else *reasonOut = bestOpp ? "while their enemy is busy fighting elsewhere" : "to grow their power";
     return true;
 }
 
@@ -246,6 +294,7 @@ static void launch(WarPlan& p, double now)
     wbLogAlways(lb);
     if (!inst) { p.stage = -1; return; }
     p.stage = STAGE_MARCHING; p.stageAt = now;
+    countWar(p.ev.attacker, p.ev.defender);
     char b[300];
     sprintf_s(b, sizeof(b), "WAR! The %s march on %s. The %s must hold it.",
               p.ev.attackerName.c_str(), p.ev.townName.c_str(), p.ev.defenderName.c_str());
@@ -327,6 +376,93 @@ static void resolve(WarPlan& p, double now)
     wbContractsOnWarEnded(e);
 }
 
+static void diplomacy(double now)
+{
+    // expire pacts (with news)
+    for (size_t i = 0; i < s_pacts.size(); )
+    {
+        if (now >= s_pacts[i].until)
+        {
+            char b[220];
+            if (s_pacts[i].kind == PACT_TRUCE)
+                sprintf_s(b, sizeof(b), "The truce between the %s and the %s has ended.",
+                          wbFactionName(s_pacts[i].a).c_str(), wbFactionName(s_pacts[i].b).c_str());
+            else
+                sprintf_s(b, sizeof(b), "The coalition of the %s and the %s has broken apart.",
+                          wbFactionName(s_pacts[i].a).c_str(), wbFactionName(s_pacts[i].b).c_str());
+            wbNews(b);
+            s_pacts.erase(s_pacts.begin() + i);
+        }
+        else ++i;
+    }
+    // TRUCE: worn out by repeated wars
+    for (size_t i = 0; i < s_pairWars.size(); ++i)
+    {
+        PairWars& pw = s_pairWars[i];
+        if (pw.wars < 2 || now - pw.last > 60.0 || atPeace(pw.a, pw.b)) continue;
+        if (wbRand01() > 0.35f) continue;
+        Pact t; t.a = pw.a; t.b = pw.b; t.kind = PACT_TRUCE; t.until = now + 30.0 + 30.0 * wbRand01(); t.against = NULL;
+        s_pacts.push_back(t);
+        pw.wars = 0;
+        char b[220];
+        sprintf_s(b, sizeof(b), "Exhausted by war, the %s and the %s have agreed to a truce.",
+                  wbFactionName(pw.a).c_str(), wbFactionName(pw.b).c_str());
+        wbNews(b);
+        return;                                              // one big event at a time
+    }
+    // COALITION: balance of power against the strongest
+    Faction* top = NULL; int topTowns = 0, second = 0;
+    for (size_t i = 0; i < s_minds.size(); ++i)
+    {
+        Faction* f = s_minds[i].f;
+        if (!f || wbIsPlayerFaction(f)) continue;
+        int n = wbTownCount(f);
+        if (n > topTowns) { second = topTowns; topTowns = n; top = f; }
+        else if (n > second) second = n;
+    }
+    if (!top || topTowns < 4 || (float)topTowns < 1.5f * (float)second) return;
+    if (coalitionEnemy(top)) return;
+    for (size_t i = 0; i < s_minds.size(); ++i)
+    {
+        Faction* a = s_minds[i].f;
+        if (!canWage(a) || a == top || coalitionEnemy(a) || !a->relations->isEnemy(top)) continue;
+        for (size_t k = i + 1; k < s_minds.size(); ++k)
+        {
+            Faction* b = s_minds[k].f;
+            if (!canWage(b) || b == top || coalitionEnemy(b) || !b->relations->isEnemy(top)) continue;
+            if (a->relations->isEnemy(b) && !findPact(a, b, PACT_TRUCE)) continue;  // can't stand each other
+            if (wbRand01() > 0.5f) continue;
+            Pact c; c.a = a; c.b = b; c.kind = PACT_COALITION; c.until = now + 45.0 + 30.0 * wbRand01(); c.against = top;
+            s_pacts.push_back(c);
+            char t[260];
+            sprintf_s(t, sizeof(t), "Fearing the %s, the %s and the %s have joined forces against them.",
+                      wbFactionName(top).c_str(), wbFactionName(a).c_str(), wbFactionName(b).c_str());
+            wbNews(t);
+            return;
+        }
+    }
+}
+
+std::string wbDiplomacySummary()
+{
+    double now = wbWorldMinutes();
+    std::string out; char b[260];
+    for (size_t i = 0; i < s_pacts.size(); ++i)
+    {
+        const Pact& p = s_pacts[i];
+        if (now >= p.until) continue;
+        if (p.kind == PACT_TRUCE)
+            sprintf_s(b, sizeof(b), "  - Truce: %s and %s (~%d min left)\n", wbFactionName(p.a).c_str(),
+                      wbFactionName(p.b).c_str(), (int)(p.until - now));
+        else
+            sprintf_s(b, sizeof(b), "  - Coalition: %s and %s against the %s (~%d min left)\n", wbFactionName(p.a).c_str(),
+                      wbFactionName(p.b).c_str(), wbFactionName(p.against).c_str(), (int)(p.until - now));
+        out += b;
+    }
+    if (out.empty()) out = "  No pacts. Every faction stands alone.\n";
+    return out;
+}
+
 // ------------------------------------------------------------ frame
 void wbWorldFrame()
 {
@@ -337,6 +473,11 @@ void wbWorldFrame()
         s_nextMindRefresh = now + 1.0;
         refreshMinds();
         if (!s_strongestKnown && !s_minds.empty()) announceStrongest(true);
+    }
+    if (now >= s_nextDiplomacy)
+    {
+        s_nextDiplomacy = now + 5.0;
+        diplomacy(now);
     }
     if (now >= s_nextPlanAt)
     {
@@ -373,7 +514,7 @@ void wbWorldOnFelled(Faction* victimFaction, float x, float z)
 
 void wbWorldReset()
 {
-    s_minds.clear(); s_plans.clear();
+    s_minds.clear(); s_plans.clear(); s_pacts.clear(); s_pairWars.clear(); s_nextDiplomacy = 3.0;
     s_nextMindRefresh = 0.0; s_nextPlanAt = 1.0;
     s_strongest = NULL; s_strongestKnown = false;
 }

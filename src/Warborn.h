@@ -80,6 +80,7 @@ void wbWorldOnFelled(Faction* victimFaction, float x, float z);
 // For the journal: one line per running war.
 std::string wbWorldSummary();
 std::string wbPowerRanking();
+std::string wbDiplomacySummary();
 
 // War events the contracts listen to.
 struct WbWarEvent
