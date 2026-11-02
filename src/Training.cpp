@@ -28,6 +28,7 @@
 #include <kenshi/combat/CombatClass.h>
 #include <kenshi/util/hand.h>
 #include <ogre/OgreVector3.h>
+#include <core/Functions.h>
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -318,6 +319,89 @@ static void yardStep(double now)
     }
 }
 
+// ------------------------------------------------------------ training dummies with a partner
+// Kenshi's own training dummies (click a dummy for your person, the normal
+// way): Warborn watches who is using one. Two of your people training at
+// dummies close to each other become PARTNERS - they learn much faster
+// (weapon, attack, defence, dodge, toughness) and keep improving past the
+// dummy's normal skill limit. Training alone at a dummy gives a small bonus.
+struct TaskSeen { Character* c; int task; RootObject* subject; };
+static TaskSeen s_tasks[96];
+static int      s_taskN = 0;
+static double   s_nextDummyTick = 0.0;
+struct Partners { Character* a; Character* b; };
+static std::vector<Partners> s_partners;      // announced pairs (no repeat toasts)
+
+static void (*s_lastTaskOrig)(Character*, Building*, TaskType, RootObject*, const Ogre::Vector3&) = NULL;
+static void lastTask_hook(Character* self, Building* dest, TaskType t, RootObject* subject, const Ogre::Vector3& loc)
+{
+    s_lastTaskOrig(self, dest, t, subject, loc);
+    if (!s_lockReady || !self) return;
+    EnterCriticalSection(&s_lock);
+    int i = 0;
+    for (; i < s_taskN; ++i) if (s_tasks[i].c == self) break;
+    if (i == s_taskN) { if (s_taskN < 96) ++s_taskN; else i = 0; }   // full: reuse a slot
+    s_tasks[i].c = self; s_tasks[i].task = (int)t; s_tasks[i].subject = subject;
+    LeaveCriticalSection(&s_lock);
+}
+
+static bool atDummy(Character* c, RootObject** dummyOut)
+{
+    RootObject* subject = NULL; bool training = false;
+    EnterCriticalSection(&s_lock);
+    for (int i = 0; i < s_taskN; ++i)
+        if (s_tasks[i].c == c) { training = (s_tasks[i].task == (int)USE_TRAINING_DUMMY); subject = s_tasks[i].subject; break; }
+    LeaveCriticalSection(&s_lock);
+    if (!training || !subject) return false;
+    Ogre::Vector3 p = c->getPosition(), q = subject->getPosition();
+    float dx = p.x - q.x, dz = p.z - q.z;
+    if (dx * dx + dz * dz > 60.0f * 60.0f) return false;                // still walking there
+    if (dummyOut) *dummyOut = subject;
+    return true;
+}
+
+static bool announced(Character* a, Character* b)
+{
+    for (size_t i = 0; i < s_partners.size(); ++i)
+        if ((s_partners[i].a == a && s_partners[i].b == b) || (s_partners[i].a == b && s_partners[i].b == a)) return true;
+    return false;
+}
+
+static void dummyStep(double now)
+{
+    if (now < s_nextDummyTick) return;
+    s_nextDummyTick = now + 0.1;                                       // every ~6 s
+    std::vector<Character*> trainers;
+    const lektor<Character*>& mine = ou->player->getAllPlayerCharacters();
+    for (uint32_t i = 0; i < mine.size(); ++i)
+        if (fit(mine[i]) && !busy(mine[i]) && atDummy(mine[i], NULL)) trainers.push_back(mine[i]);
+    std::vector<Partners> stillPaired;
+    for (size_t i = 0; i < trainers.size(); ++i)
+    {
+        Character* c = trainers[i];
+        Character* partner = NULL; float best = g_wb.partnerRange * g_wb.partnerRange;
+        for (size_t k = 0; k < trainers.size(); ++k)
+        {
+            if (k == i) continue;
+            float d = dist2(c, trainers[k]);
+            if (d < best) { best = d; partner = trainers[k]; }
+        }
+        if (partner)
+        {
+            giveXp(c, g_wb.partnerXp);
+            if (i < (size_t)(std::find(trainers.begin(), trainers.end(), partner) - trainers.begin()))
+            {
+                Partners p; p.a = c; p.b = partner; stillPaired.push_back(p);
+                if (!announced(c, partner))
+                    wbToast((std::string(c->getName()) + " and " + partner->getName()
+                             + " train together at the dummies - partners learn much faster.").c_str());
+            }
+        }
+        else giveXp(c, g_wb.soloDummyXp);
+    }
+    s_partners.swap(stillPaired);
+}
+
 void wbTrainingFrame()
 {
     if (!ou || !ou->player) return;
@@ -326,6 +410,7 @@ void wbTrainingFrame()
     if (g_wbYardPressed) toggleYard();
     double now = wbWorldMinutes();
     yardStep(now);
+    dummyStep(now);
     for (size_t i = 0; i < s_bouts.size(); )
     {
         Bout& t = s_bouts[i];
@@ -382,6 +467,8 @@ std::string wbTrainingSummary()
         char b[80]; sprintf_s(b, sizeof(b), "  Tournament: round %d\n", s_tRound);
         out += b;
     }
+    for (size_t i = 0; i < s_partners.size(); ++i)
+        out += "  Partners at the dummies: " + std::string(s_partners[i].a->getName()) + " & " + s_partners[i].b->getName() + "\n";
     if (s_yardOn) out += "  Training yard: marked - your people inside it spar in pairs (Alt+Y with someone inside removes it)\n";
     if (out.empty()) out = "  Nobody is training. (Alt+T spar, Shift+Alt+T tournament, Alt+Y mark a training yard)\n";
     return out;
@@ -390,6 +477,11 @@ std::string wbTrainingSummary()
 void wbTrainingInit()
 {
     if (!s_lockReady) { InitializeCriticalSection(&s_lock); s_lockReady = true; }
+    if (KenshiLib::SUCCESS != KenshiLib::AddHook(KenshiLib::GetRealAddress(&Character::updateLastTask),
+                                                 (void*)&lastTask_hook, &s_lastTaskOrig))
+        ErrorLog("Warborn: updateLastTask hook FAILED - dummy partner training off");
+    else
+        DebugLog("Warborn: updateLastTask hook OK (dummy partner training)");
 }
 void wbTrainingSave(std::vector<std::string>& out)
 {
@@ -410,6 +502,8 @@ void wbTrainingLoad(const std::vector<std::string>& in)
 void wbTrainingReset()
 {
     s_yardOn = false; s_yardRest.clear(); s_nextYardPairing = 0.0;
+    s_partners.clear(); s_nextDummyTick = 0.0;
+    if (s_lockReady) { EnterCriticalSection(&s_lock); s_taskN = 0; LeaveCriticalSection(&s_lock); }
     s_bouts.clear(); s_bracket.clear(); s_nextRound.clear(); s_tournament = false;
     publishPairs();
 }

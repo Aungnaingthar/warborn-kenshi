@@ -30,6 +30,7 @@ Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 | **Territory map** | Journal Map tab: every town in its owner's colour, sieges marked, each power's wars and pacts. |
 | **Saved with your game** | News, renown, pacts, grudges, contracts and your warband are stored per save. |
 | **Original dialogue** | Many varied lines for rumours, war news, conquests, pacts and recruit answers. |
+| **Dummy partners** | Put two of your people on training dummies next to each other: they become partners and learn much faster (including Toughness = more HP), even past the dummy's usual limit. |
 | **Training** | **Alt+T**: two of your people spar 1 vs 1 (blunted blows, real bruises and knock-downs) and learn faster. **Shift+Alt+T**: a knockout tournament, the champion gains fame. |
 | **Start options** | Journal **People** tab: choose Noble, Merchant, Warrior, Exile or Slave-born once per game, each with its own money, standing, fame and loyalty effects. |
 | **Talk to anyone** | **Alt+H** on the person under the mouse: greetings by how their faction sees you, rumours, what they think of your fame, work. Your own people tell you how they feel. |

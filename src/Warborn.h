@@ -55,6 +55,9 @@ struct WbConfig
     int   yardKey;              // Alt+Y: mark / remove the training yard
     float yardRadius;
     float yardRestSeconds;
+    float partnerXp;            // per ~6 s, two people training at dummies together
+    float soloDummyXp;          // per ~6 s, alone at a dummy
+    float partnerRange;         // how close the two dummies must be
     // followers
     int   talkKey;              // H
     int   marryKey;             // M
