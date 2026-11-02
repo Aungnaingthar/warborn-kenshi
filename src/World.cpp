@@ -273,11 +273,8 @@ static void startPlan(double now)
     p.home = home; p.stage = STAGE_PLANNING; p.stageAt = now; p.reason = reason;
     s_plans.push_back(p);
 
-    char b[300];
-    sprintf_s(b, sizeof(b), "Rumour: the %s are gathering warriors at %s, eyeing %s of the %s %s.",
-              p.ev.attackerName.c_str(), wbTownName(home).c_str(), p.ev.townName.c_str(),
-              p.ev.defenderName.c_str(), reason);
-    wbNews(b);
+    WbVars v; v.A = p.ev.attackerName; v.D = p.ev.defenderName; v.T = p.ev.townName; v.H = wbTownName(home); v.R = reason;
+    wbNews(wbLine(LINE_RUMOUR, v).c_str());
 }
 
 static void launch(WarPlan& p, double now)
@@ -295,10 +292,8 @@ static void launch(WarPlan& p, double now)
     if (!inst) { p.stage = -1; return; }
     p.stage = STAGE_MARCHING; p.stageAt = now;
     countWar(p.ev.attacker, p.ev.defender);
-    char b[300];
-    sprintf_s(b, sizeof(b), "WAR! The %s march on %s. The %s must hold it.",
-              p.ev.attackerName.c_str(), p.ev.townName.c_str(), p.ev.defenderName.c_str());
-    wbNews(b);
+    WbVars v; v.A = p.ev.attackerName; v.D = p.ev.defenderName; v.T = p.ev.townName; v.H = wbTownName(p.home);
+    wbNews(wbLine(LINE_WAR_START, v).c_str());
     wbContractsOnWarStarted(p.ev);
 }
 
@@ -314,10 +309,9 @@ static void announceStrongest(bool quiet)
     }
     if (best && best != s_strongest && bestTowns >= 3 && s_strongestKnown && !quiet)
     {
-        char b[200];
-        sprintf_s(b, sizeof(b), "The %s now rule %d towns - the mightiest power in the land.",
-                  wbFactionName(best).c_str(), bestTowns);
-        wbNews(b);
+        char n[16]; sprintf_s(n, sizeof(n), "%d", bestTowns);
+        WbVars v; v.A = wbFactionName(best); v.X = n;
+        wbNews(wbLine(LINE_STRONGEST, v).c_str());
     }
     s_strongest = best; s_strongestKnown = true;
 }
@@ -340,14 +334,12 @@ static void resolve(WarPlan& p, double now)
               e.id, chance, taken ? 1 : 0, e.playerHelpedAttacker, e.playerHelpedDefender);
     wbLogAlways(lb);
 
-    char b[300];
+    WbVars v; v.A = e.attackerName; v.D = e.defenderName; v.T = e.townName; v.H = wbTownName(p.home);
     if (taken)
     {
         e.town->setFaction(e.attacker, NULL);
         e.conquered = true;
-        sprintf_s(b, sizeof(b), "%s has fallen! The %s took it from the %s.",
-                  e.townName.c_str(), e.attackerName.c_str(), e.defenderName.c_str());
-        wbNews(b);
+        wbNews(wbLine(LINE_TOWN_FELL, v).c_str());
         FacMind* loser = mindOf(e.defender);
         if (loser) { loser->grudge = e.attacker; loser->lostTown = e.town; loser->grudgeUntil = now + 90.0; }
         if (e.attacker->relations) e.attacker->relations->affectRelations(e.defender, -15.0f, 1.0f);
@@ -356,21 +348,21 @@ static void resolve(WarPlan& p, double now)
     }
     else
     {
-        sprintf_s(b, sizeof(b), "The %s held %s. The %s assault was driven off.",
-                  e.defenderName.c_str(), e.townName.c_str(), e.attackerName.c_str());
-        wbNews(b);
+        wbNews(wbLine(LINE_TOWN_HELD, v).c_str());
     }
     // the player's part in it
     if (e.playerHelpedDefender > 0)
     {
         float k = e.playerHelpedDefender >= 3 ? 1.0f : (float)e.playerHelpedDefender / 3.0f;
         wbGiveRep(e.defender, g_wb.repWarHelp * k, "for fighting at their side");
+        wbAddRenown(3.0f * k + (e.conquered ? 0.0f : 2.0f), "for your part in the siege");
         wbGiveRep(e.attacker, -0.5f * g_wb.repWarHelp * k, "for fighting against them");
     }
     if (e.playerHelpedAttacker > 0)
     {
         float k = e.playerHelpedAttacker >= 3 ? 1.0f : (float)e.playerHelpedAttacker / 3.0f;
         wbGiveRep(e.attacker, g_wb.repWarHelp * k, "for joining their assault");
+        wbAddRenown(3.0f * k + (e.conquered ? 3.0f : 0.0f), "for your part in the assault");
         wbGiveRep(e.defender, -0.5f * g_wb.repWarHelp * k, "for attacking their town");
     }
     wbContractsOnWarEnded(e);
@@ -404,10 +396,8 @@ static void diplomacy(double now)
         Pact t; t.a = pw.a; t.b = pw.b; t.kind = PACT_TRUCE; t.until = now + 30.0 + 30.0 * wbRand01(); t.against = NULL;
         s_pacts.push_back(t);
         pw.wars = 0;
-        char b[220];
-        sprintf_s(b, sizeof(b), "Exhausted by war, the %s and the %s have agreed to a truce.",
-                  wbFactionName(pw.a).c_str(), wbFactionName(pw.b).c_str());
-        wbNews(b);
+        WbVars v; v.A = wbFactionName(pw.a); v.D = wbFactionName(pw.b);
+        wbNews(wbLine(LINE_TRUCE, v).c_str());
         return;                                              // one big event at a time
     }
     // COALITION: balance of power against the strongest
@@ -434,10 +424,8 @@ static void diplomacy(double now)
             if (wbRand01() > 0.5f) continue;
             Pact c; c.a = a; c.b = b; c.kind = PACT_COALITION; c.until = now + 45.0 + 30.0 * wbRand01(); c.against = top;
             s_pacts.push_back(c);
-            char t[260];
-            sprintf_s(t, sizeof(t), "Fearing the %s, the %s and the %s have joined forces against them.",
-                      wbFactionName(top).c_str(), wbFactionName(a).c_str(), wbFactionName(b).c_str());
-            wbNews(t);
+            WbVars v; v.A = wbFactionName(a); v.D = wbFactionName(b); v.T = wbFactionName(top);
+            wbNews(wbLine(LINE_COALITION, v).c_str());
             return;
         }
     }

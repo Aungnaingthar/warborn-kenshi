@@ -64,6 +64,18 @@ int         wbTownCount(Faction* f);
 bool        wbIsPlayerFaction(Faction* f);
 float       wbRand01();
 
+// ------------------------------------------------------------ lines (Lines.cpp)
+enum LineKind { LINE_RUMOUR = 0, LINE_WAR_START, LINE_TOWN_FELL, LINE_TOWN_HELD, LINE_STRONGEST,
+                LINE_TRUCE, LINE_COALITION, LINE_RECRUIT_YES, LINE_RECRUIT_NO, LINE_RECRUIT_HOSTILE,
+                LINE_NEW_TITLE, LINE_COUNT };
+struct WbVars { std::string A, D, T, H, R, N, F, X; };
+std::string wbLine(int kind, const WbVars& v);   // a random original line, placeholders filled
+
+// ------------------------------------------------------------ renown (People.cpp)
+void        wbAddRenown(float amount, const char* why);
+float       wbRenown();
+const char* wbRenownTitle();
+
 // ------------------------------------------------------------ ui
 void wbToast(const char* text);               // one line at the top for a few seconds
 void wbNews(const char* text);                // toast + journal entry

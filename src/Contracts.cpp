@@ -122,6 +122,7 @@ void wbContractsOnWarEnded(const WbWarEvent& e)
                       c.kind == CK_DEFEND ? "you defended" : "you helped take", c.townName.c_str(), c.giverName.c_str());
             wbNews(b);
             wbGiveRep(c.giver, c.reward, "for the contract");
+            wbAddRenown(5.0f, "a contract fulfilled");
         }
         else
         {
@@ -148,6 +149,7 @@ void wbContractsOnFelled(Faction* victimFaction)
                           c.need, c.targetName.c_str(), c.giverName.c_str());
                 wbNews(b);
                 wbGiveRep(c.giver, c.reward, "for the hunt");
+                wbAddRenown(2.0f + 0.5f * (float)c.need, "a hunt completed");
                 s_active.erase(s_active.begin() + i);
                 continue;
             }

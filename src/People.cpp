@@ -38,6 +38,34 @@
 extern bool g_wbRecruitPressed;
 extern bool g_wbCmdPressed[4];
 
+// ------------------------------------------------------------ renown
+// Your personal fame. Deeds raise it; titles mark the way; it makes people
+// more willing to follow you.
+static float s_renown = 0.0f;
+static int   s_titleIdx = 0;
+struct Title { float at; const char* name; };
+static const Title TITLES[] = {
+    { 0.0f, "Nobody" }, { 8.0f, "Known Drifter" }, { 20.0f, "Sellsword" }, { 40.0f, "Blade for Hire" },
+    { 70.0f, "Captain" }, { 110.0f, "Warlord" }, { 170.0f, "Champion of the Wastes" }, { 250.0f, "Living Legend" },
+};
+static const int TITLE_COUNT = (int)(sizeof(TITLES) / sizeof(TITLES[0]));
+float wbRenown() { return s_renown; }
+const char* wbRenownTitle() { return TITLES[s_titleIdx].name; }
+void wbAddRenown(float amount, const char* why)
+{
+    if (amount <= 0.0f) return;
+    s_renown += amount;
+    char lb[160]; sprintf_s(lb, sizeof(lb), "[Warborn] renown +%.1f (%s) = %.1f", amount, why ? why : "", s_renown); wbLog(lb);
+    int idx = s_titleIdx;
+    while (idx + 1 < TITLE_COUNT && s_renown >= TITLES[idx + 1].at) ++idx;
+    if (idx != s_titleIdx)
+    {
+        s_titleIdx = idx;
+        WbVars v; v.X = TITLES[idx].name;
+        wbNews(wbLine(LINE_NEW_TITLE, v).c_str());
+    }
+}
+
 // ------------------------------------------------------------ reputation
 struct RepBucket { Faction* f; float given; double windowStart; float pendingToast; };
 static std::vector<RepBucket> s_rep;
@@ -103,6 +131,8 @@ void wbPeopleOnFelled(Faction* vf, float x, float z)
     wbWorldOnFelled(vf, x, z);
     wbContractsOnFelled(vf);
 
+    wbAddRenown(0.25f, "an enemy felled");
+
     // the enemy of my enemy...
     if (!ou || !ou->factionMgr || !ou->player) return;
     const lektor<Faction*>* all = ou->factionMgr->getAllFactions();
@@ -143,6 +173,14 @@ std::string wbReputationSummary()
         out += b;
     }
     if (out.empty()) out = "  You are unknown. Meet people and make a name.\n";
+    char t[160];
+    sprintf_s(t, sizeof(t), "\nRENOWN: %d - known as \"%s\"\n", (int)s_renown, TITLES[s_titleIdx].name);
+    out += t;
+    if (s_titleIdx + 1 < TITLE_COUNT)
+    {
+        sprintf_s(t, sizeof(t), "  Next title at %d: \"%s\"\n", (int)TITLES[s_titleIdx + 1].at, TITLES[s_titleIdx + 1].name);
+        out += t;
+    }
     return out;
 }
 
@@ -178,16 +216,18 @@ static void tryRecruit()
 
     std::string name = c->getName();
     Faction* vf = c->getFaction();
+    WbVars v; v.N = name; v.F = wbFactionName(vf);
     if (vf && vf->relations && vf->relations->isEnemy(pf))
     {
-        char b[200]; sprintf_s(b, sizeof(b), "%s spits at your feet. (The %s are hostile to you.)", name.c_str(), wbFactionName(vf).c_str());
-        wbToast(b); return;
+        wbToast(wbLine(LINE_RECRUIT_HOSTILE, v).c_str()); return;
     }
     float rel = (vf && vf->relations) ? vf->relations->getFactionRelation(pf) : 0.0f;
     int towns = wbTownCount(vf);
     float chance = g_wb.recruitBase + 0.6f * rel / 100.0f;
     if (towns == 0) chance += 0.15f;                  // drifters and wanderers
     if (towns >= 5) chance *= 0.6f;                   // loyal to a great power
+    float fame = s_renown / 400.0f; if (fame > 0.25f) fame = 0.25f;
+    chance += fame;                                   // your name carries weight
     if (chance < 0.02f) chance = 0.02f;
     if (chance > 0.95f) chance = 0.95f;
 
@@ -199,12 +239,12 @@ static void tryRecruit()
     if (!yes)
     {
         Refusal r; r.c = c; r.until = now + 10.0; s_refusals.push_back(r);
-        char b[200]; sprintf_s(b, sizeof(b), "%s refuses to join you. (chance %d%%)", name.c_str(), (int)(chance * 100.0f));
+        char b[300]; sprintf_s(b, sizeof(b), "%s  (chance %d%%)", wbLine(LINE_RECRUIT_NO, v).c_str(), (int)(chance * 100.0f));
         wbToast(b); return;
     }
     c->setFaction(pf, leader->getPlatoon());
-    char b[200]; sprintf_s(b, sizeof(b), "%s has joined your band!", name.c_str());
-    wbNews(b);
+    wbNews((name + " has joined your band! " + wbLine(LINE_RECRUIT_YES, v)).c_str());
+    wbAddRenown(1.0f, "a new follower");
 }
 
 // ------------------------------------------------------------ commands
@@ -285,6 +325,7 @@ void wbPeopleFrame()
 
 void wbPeopleReset()
 {
+    s_renown = 0.0f; s_titleIdx = 0;
     s_rep.clear();
     s_refusals.clear();
 }
