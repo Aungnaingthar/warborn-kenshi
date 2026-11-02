@@ -759,6 +759,20 @@ static bool wbOwnsMouseLook() { return s_wbStanceOn && s_wbLockCamera && s_wbLoc
 static void wbCameraFollow();   // defined with the stance tick (needs the lock helpers)
 static void wbStaggerTick();    // defined with the hit hook (WARBORN STAGGERS)
 static void wbStanceTick();     // defined after the aim-focus helpers
+static void wbSquadTick();      // defined after the stance tick
+// Squad commands (Mount & Blade style): nearby squad members get orders.
+enum WbCmd { WBC_FOLLOW = 0, WBC_HOLD, WBC_CHARGE, WBC_ATTACK_TARGET, WBC_COUNT };
+static const char* const  WBC_NAME[WBC_COUNT] = { "FOLLOW ME", "HOLD POSITION", "CHARGE!", "ATTACK MY TARGET" };
+static bool               s_wbSquadCommands   = true;
+static int                s_wbCmdVk[WBC_COUNT] = { VK_F5, VK_F6, VK_F7, VK_F8 };
+static volatile ULONGLONG s_wbCmdPressMs[WBC_COUNT] = { 0, 0, 0, 0 };
+static ULONGLONG          s_wbCmdSeenMs[WBC_COUNT]  = { 0, 0, 0, 0 };
+static float              s_wbCmdRange        = 150.0f;
+static MyGUI::TextBox*    s_wbCmdHud          = nullptr;
+static bool               s_wbCmdHudTried     = false;
+static ULONGLONG          s_wbCmdHudUntil     = 0;
+static char               s_wbCmdHudText[64]  = "";
+static bool               s_wbCmdHudDirty     = false;
 // Staggers (KCD 2 hit reactions with Kenshi's own stumble animations).
 static bool               s_wbStaggers        = true;
 static bool               s_wbParryStagger    = true;
@@ -2622,6 +2636,13 @@ static DWORD WINAPI PollThread(LPVOID)
             if (sw && !s_wbSwitchPrev && s_wbStanceOn) s_wbSwitchPressMs = GetTickCount64();
             s_wbSwitchPrev = sw;
             s_wbAltHeld = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+            static bool s_wbCmdPrev[WBC_COUNT] = { false, false, false, false };
+            for (int ci = 0; ci < WBC_COUNT; ++ci)
+            {
+                bool cd = s_wbCmdVk[ci] > 0 && (GetAsyncKeyState(s_wbCmdVk[ci]) & 0x8000) != 0;
+                if (cd && !s_wbCmdPrev[ci] && !s_camRotateUiOpen) s_wbCmdPressMs[ci] = GetTickCount64();
+                s_wbCmdPrev[ci] = cd;
+            }
             wbMouseTaken = s_wbMouseLive && !s_wbAltHeld && !s_camRotateUiOpen;
             if (wbMouseTaken)
             {
@@ -5267,6 +5288,38 @@ static void manualAttackHudUpdate()
     else if (s_manualHud->getVisible()) s_manualHud->setVisible(false);
 }
 
+// WARBORN: squad command toast - one line near the top for ~2 s.
+static void wbCmdHudUpdate()
+{
+    bool want = GetTickCount64() < s_wbCmdHudUntil && !s_loadGuardActive;
+    if (want && !s_wbCmdHud && !s_wbCmdHudTried)
+    {
+        s_wbCmdHudTried = true;
+        try
+        {
+            MyGUI::Gui* g = MyGUI::Gui::getInstancePtr();
+            MyGUI::IntSize v = MyGUI::RenderManager::getInstance().getViewSize();
+            if (g)
+                s_wbCmdHud = g->createWidget<MyGUI::TextBox>("Kenshi_TextboxStandardText_Small",
+                                 v.width / 2 - 160, 56, 320, 18, MyGUI::Align::Default, "Top", "wb_squad_hud");
+            if (s_wbCmdHud)
+            {
+                s_wbCmdHud->setTextAlign(MyGUI::Align::Center);
+                s_wbCmdHud->setTextColour(MyGUI::Colour(1.0f, 0.85f, 0.4f, 1.0f));
+                s_wbCmdHud->setNeedMouseFocus(false);
+                s_wbCmdHud->setVisible(false);
+            }
+        }
+        catch (...) { s_wbCmdHud = nullptr; DebugLog("[Warborn] squad_hud_create_failed"); }
+    }
+    if (!s_wbCmdHud) return;
+    if (!want) { if (s_wbCmdHud->getVisible()) s_wbCmdHud->setVisible(false); return; }
+    if (s_wbCmdHudDirty) { s_wbCmdHud->setCaption(s_wbCmdHudText); s_wbCmdHudDirty = false; }
+    MyGUI::IntSize v = MyGUI::RenderManager::getInstance().getViewSize();
+    s_wbCmdHud->setPosition(v.width / 2 - 160, 56);
+    if (!s_wbCmdHud->getVisible()) s_wbCmdHud->setVisible(true);
+}
+
 // WARBORN: stance HUD - one small line under the crosshair: the swing
 // direction while locked, or that no enemy is in reach.
 static void wbHudUpdate()
@@ -6387,6 +6440,7 @@ static void cameraUpdate_inner(CameraClass* thisptr, bool controlEnabled)
     s_cameraUpdateOrig(thisptr, ctlEnabled);
     manualAttackHudUpdate();    // "Manual Attack" label (self-gated)
     wbHudUpdate();              // WARBORN: stance direction label (self-gated)
+    wbCmdHudUpdate();           // WARBORN: squad command toast (self-gated)
     focusMarkersUpdate(thisptr);   // lock dot + weapon glints (self-gated)
 
     // SCENE-FREEING — the Ogre scene is actively being torn down: only `!ou`
@@ -8062,6 +8116,7 @@ static void manualBlockTick()
     manualAimTick();
     wbStanceTick();       // WARBORN: KCD 2 stance (lock overrides the aim focus)
     wbStaggerTick();      // WARBORN: queued hit / parry staggers
+    wbSquadTick();        // WARBORN: squad commands (F5-F8)
     manualStaggerTick();
     manualDodgePressTick();
     manualAttackPressTick();
@@ -8388,6 +8443,106 @@ static void wbCameraFollow()
     while (diff < -3.14159265f) diff += 6.2831853f;
     float k = s_wbCamFollow * dt; if (k > 1.0f) k = 1.0f;
     s_otsYaw += diff * k;
+}
+
+// ===================================================================
+// WARBORN SQUAD COMMANDS (Mount & Blade style)
+// F5 follow me, F6 hold position, F7 charge, F8 attack my target - given to
+// every conscious squad member near the character you control (not to you).
+// Uses the game's own player orders, so the AI carries them out as usual.
+// ===================================================================
+static Character* wbNearestEnemyOf(Character* c, float range)
+{
+    if (!c || !c->movement || !s_gwFrame) return nullptr;
+    const Ogre::Vector3 p = c->movement->pos;
+    Character* best = nullptr; float bestD2 = range * range;
+    auto& chars = s_gwFrame->getCharacterUpdateList();
+    for (auto it = chars.begin(); it != chars.end(); ++it)
+    {
+        Character* e = *it;
+        if (!e || e == c || !e->movement) continue;
+        float dx = e->movement->pos.x - p.x, dz = e->movement->pos.z - p.z;
+        float d2 = dx * dx + dz * dz;
+        if (d2 >= bestD2) continue;
+        if (e->isDead() || e->isUnconcious() || e->isDown() || !e->isEnemy(c, true)) continue;
+        bestD2 = d2; best = e;
+    }
+    return best;
+}
+
+static void wbCmdToast(const char* text)
+{
+    strncpy_s(s_wbCmdHudText, sizeof(s_wbCmdHudText), text, _TRUNCATE);
+    s_wbCmdHudUntil = GetTickCount64() + 2200;
+    s_wbCmdHudDirty = true;
+}
+
+static void wbIssueCommand(int cmd, Character* me)
+{
+    Character* target = nullptr;
+    if (cmd == WBC_ATTACK_TARGET)
+    {
+        target = (s_wbLock && focusTargetValid(s_wbLock)) ? s_wbLock : manualAimPick(me, 600.0f);
+        if (!target || !target->movement) { wbCmdToast("No target - lock one first (R)"); return; }
+    }
+    const Ogre::Vector3 mp = me->movement->pos;
+    const float maxR2 = s_wbCmdRange * s_wbCmdRange;
+    int n = 0;
+    auto& chars = s_gwFrame->getCharacterUpdateList();
+    for (auto it = chars.begin(); it != chars.end(); ++it)
+    {
+        Character* c = *it;
+        if (!c || c == me || !c->movement || !c->isPlayerCharacter()) continue;
+        if (c->isDead() || c->isUnconcious() || c->isDown()) continue;
+        float dx = c->movement->pos.x - mp.x, dz = c->movement->pos.z - mp.z;
+        if (dx * dx + dz * dz > maxR2) continue;
+        if (!c->canTakePlayerOrdersAtThisTime()) continue;
+        switch (cmd)
+        {
+            case WBC_FOLLOW:
+                c->addOrder(nullptr, FOLLOW_PLAYER_ORDER, (RootObject*)me, false, true, mp);
+                break;
+            case WBC_HOLD:
+                c->addOrder(nullptr, HOLD_POSITION, nullptr, false, true, c->movement->pos);
+                break;
+            case WBC_CHARGE:
+            {
+                Character* foe = wbNearestEnemyOf(c, s_wbCmdRange * 2.0f);
+                if (!foe) foe = wbNearestEnemyOf(me, s_wbCmdRange * 2.0f);
+                if (!foe || !foe->movement) continue;
+                c->addOrder(nullptr, MELEE_ATTACK, (RootObject*)foe, false, true, foe->movement->pos);
+                break;
+            }
+            case WBC_ATTACK_TARGET:
+                c->addOrder(nullptr, MELEE_ATTACK, (RootObject*)target, false, true, target->movement->pos);
+                break;
+        }
+        ++n;
+    }
+    char b[80];
+    if (n > 0) sprintf_s(b, sizeof(b), "Squad (%d): %s", n, WBC_NAME[cmd]);
+    else       sprintf_s(b, sizeof(b), "%s - nobody in range", WBC_NAME[cmd]);
+    wbCmdToast(b);
+    char lb[96]; sprintf_s(lb, sizeof(lb), "[Warborn] squad_command %s given=%d", WBC_NAME[cmd], n);
+    DebugLog(lb);
+}
+
+static void wbSquadTick()
+{
+    if (!s_wbSquadCommands) return;
+    for (int i = 0; i < WBC_COUNT; ++i)
+    {
+        ULONGLONG p = s_wbCmdPressMs[i];
+        if (p == 0 || p == s_wbCmdSeenMs[i]) continue;
+        s_wbCmdSeenMs[i] = p;
+        Character* me = s_freeMoveAnchor;
+        if (s_mode != MODE_FREE_MOVE || !me || !me->movement || !s_gwFrame || s_loadGuardActive)
+        {
+            wbCmdToast("Squad commands need Direct Control (V or R)");
+            continue;
+        }
+        wbIssueCommand(i, me);
+    }
 }
 
 // Directional attacks: when the stance has a wanted direction, re-roll the
@@ -12503,6 +12658,12 @@ static void wbLoadStanceConfig(const char* path)
     s_wbAttackSpeedMax = wbIniF(path, "AttackSpeedMax",    s_wbAttackSpeedMax);
     s_wbBlockSpeedMax  = wbIniF(path, "BlockSpeedMax",     s_wbBlockSpeedMax);
     s_wbStaggers       = wbIniB(path, "Staggers",          s_wbStaggers);
+    s_wbSquadCommands  = wbIniB(path, "SquadCommands",     s_wbSquadCommands);
+    s_wbCmdRange       = wbIniF(path, "CommandRange",      s_wbCmdRange);
+    s_wbCmdVk[WBC_FOLLOW]        = wbIniKey(path, "CmdFollowKey",       "F5");
+    s_wbCmdVk[WBC_HOLD]          = wbIniKey(path, "CmdHoldKey",         "F6");
+    s_wbCmdVk[WBC_CHARGE]        = wbIniKey(path, "CmdChargeKey",       "F7");
+    s_wbCmdVk[WBC_ATTACK_TARGET] = wbIniKey(path, "CmdAttackTargetKey", "F8");
     s_wbParryStagger   = wbIniB(path, "ParryStagger",      s_wbParryStagger);
     s_wbStaggerDamage  = wbIniF(path, "StaggerDamage",     s_wbStaggerDamage);
     s_wbStaggerMaxChance = wbIniF(path, "StaggerMaxChance", s_wbStaggerMaxChance);

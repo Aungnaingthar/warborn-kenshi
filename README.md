@@ -10,6 +10,8 @@ Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
   - Skill/armor damage for every fighter, hit-stop and camera shake (`Warborn.cpp`)
   - KCD 2 combat stance: lock-on, mouse attack/block, directional swings
   - Realistic speed cap, so high skill never swings superhumanly fast
+  - Staggers: strong hits and perfect blocks trigger Kenshi's stumble animations
+  - Mount & Blade-style squad commands (F5 to F8)
   - No name/health bars over enemies
 
 ## Controls (Warborn combat stance)
@@ -24,6 +26,10 @@ Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 | `Q` | Dodge |
 | `W A S D` | Move / circle the locked enemy |
 | `Alt` (hold) | Free cursor |
+| `F5` | Squad: follow me |
+| `F6` | Squad: hold position |
+| `F7` | Squad: charge (each attacks the nearest enemy) |
+| `F8` | Squad: attack my locked target |
 
 All other Direct Control keys still work (see `upstream/DirectControl_README.md`).
 
