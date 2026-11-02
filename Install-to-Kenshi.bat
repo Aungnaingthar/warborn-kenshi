@@ -9,7 +9,7 @@ rem ==============================================================
 set "KENSHI=C:\Program Files (x86)\Steam\steamapps\common\Kenshi"
 if not "%~1"=="" set "KENSHI=%~1"
 set "SRC=%~dp0"
-set "DLL=!SRC!WASDCombatPlugin\WASDCombatPlugin.dll"
+set "DLL=!SRC!Warborn\Warborn.dll"
 set "DEST=!KENSHI!\mods\Warborn"
 
 if not exist "!KENSHI!\kenshi_x64.exe" goto :nokenshi
@@ -24,15 +24,17 @@ copy /Y "!SRC!package\RE_Kenshi.json" "!DEST!\" >nul
 if errorlevel 1 goto :denied
 copy /Y "!SRC!package\Warborn.mod" "!DEST!\" >nul
 if errorlevel 1 goto :denied
-if exist "!DEST!\WASDCombatPlugin.ini" copy /Y "!DEST!\WASDCombatPlugin.ini" "!DEST!\WASDCombatPlugin.ini.bak" >nul
-copy /Y "!SRC!WASDCombatPlugin.ini" "!DEST!\" >nul
+if exist "!DEST!\Warborn.ini" copy /Y "!DEST!\Warborn.ini" "!DEST!\Warborn.ini.bak" >nul
+copy /Y "!SRC!Warborn.ini" "!DEST!\" >nul
 if errorlevel 1 goto :denied
+rem the older Direct Control based build lived here too - remove it
+if exist "!DEST!\WASDCombatPlugin.dll" del /Q "!DEST!\WASDCombatPlugin.dll"
+if exist "!DEST!\WASDCombatPlugin.ini" del /Q "!DEST!\WASDCombatPlugin.ini"
 
 echo [OK] Warborn installed to:
 echo      !DEST!
 echo.
 echo Next: start Kenshi with RE_Kenshi, open Mods, tick "Warborn".
-echo Turn OFF the original "Direct Control" mod if you have it.
 goto :end
 
 :nokenshi

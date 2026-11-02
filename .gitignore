@@ -430,3 +430,4 @@ FodyWeavers.xsd
 
 # build output folder (Release DLL lands here)
 /WASDCombatPlugin/
+/Warborn/

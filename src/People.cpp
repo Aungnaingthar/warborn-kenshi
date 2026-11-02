@@ -1,0 +1,290 @@
+// Warborn: World - reputation, recruiting, squad commands.
+// Copyright (C) 2026 Aungnaingthar. Licensed under the GNU GPLv3 (see LICENSE).
+//
+// Reputation (original mechanic, "the enemy of my enemy"):
+//   Every enemy fighter your squad fells earns a little respect from every
+//   faction you know that is at war with theirs (capped, so it can't be
+//   farmed). Fighting in a war at a town, and contracts, earn much more.
+//
+// Recruiting: click a person to select them, press RecruitKey (Y). They may
+//   join you: your reputation with their faction decides it. Wanderers from
+//   small clans join more easily, people of great powers are more loyal.
+//
+// Commands (you give orders, you don't take control):
+//   F5 follow me, F6 hold position, F7 charge (each picks the nearest enemy),
+//   F8 focus (everyone attacks the enemy nearest the leader). The leader is
+//   your selected character; orders go to your people near them.
+
+#include "Warborn.h"
+
+#include <Debug.h>
+#include <kenshi/Globals.h>
+#include <kenshi/GameWorld.h>
+#include <kenshi/PlayerInterface.h>
+#include <kenshi/Character.h>
+#include <kenshi/Faction.h>
+#include <kenshi/FactionRelations.h>
+#include <kenshi/Enums.h>
+#include <kenshi/util/hand.h>
+#include <ogre/OgreVector3.h>
+
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#include <stdio.h>
+#include <math.h>
+#include <vector>
+#include <algorithm>
+
+extern bool g_wbRecruitPressed;
+extern bool g_wbCmdPressed[4];
+
+// ------------------------------------------------------------ reputation
+struct RepBucket { Faction* f; float given; double windowStart; float pendingToast; };
+static std::vector<RepBucket> s_rep;
+
+static RepBucket& bucket(Faction* f, double now)
+{
+    for (size_t i = 0; i < s_rep.size(); ++i)
+        if (s_rep[i].f == f)
+        {
+            if (now - s_rep[i].windowStart > 10.0) { s_rep[i].windowStart = now; s_rep[i].given = 0.0f; }
+            return s_rep[i];
+        }
+    RepBucket b; b.f = f; b.given = 0.0f; b.windowStart = now; b.pendingToast = 0.0f;
+    s_rep.push_back(b);
+    return s_rep.back();
+}
+
+void wbGiveRep(Faction* f, float amount, const char* why)
+{
+    Faction* pf = wbPlayerFaction();
+    if (!f || !pf || f == pf || !f->relations || amount == 0.0f) return;
+    float before = f->relations->getFactionRelation(pf);
+    f->relations->affectRelations(pf, amount, 1.0f);
+    float after = f->relations->getFactionRelation(pf);
+    char lb[220];
+    sprintf_s(lb, sizeof(lb), "[Warborn] rep %s %+.1f (%s) theirView %.1f->%.1f ourView %.1f",
+              wbFactionName(f).c_str(), amount, why, before, after,
+              pf->relations ? pf->relations->getFactionRelation(f) : 0.0f);
+    wbLog(lb);
+    if (fabsf(amount) >= 1.0f)
+    {
+        char b[200];
+        sprintf_s(b, sizeof(b), "Reputation %+d with the %s %s.", (int)(amount + (amount > 0 ? 0.5f : -0.5f)),
+                  wbFactionName(f).c_str(), why);
+        wbToast(b);
+    }
+}
+
+// Small, capped rep from every felled enemy - toasted once a whole point builds up.
+static void smallRep(Faction* f, float amount, double now)
+{
+    RepBucket& b = bucket(f, now);
+    float room = g_wb.repCapPerFaction - b.given;
+    if (room <= 0.0f) return;
+    if (amount > room) amount = room;
+    b.given += amount;
+    Faction* pf = wbPlayerFaction();
+    if (f->relations && pf) f->relations->affectRelations(pf, amount, 1.0f);
+    b.pendingToast += amount;
+    if (b.pendingToast >= 1.0f)
+    {
+        char t[200];
+        sprintf_s(t, sizeof(t), "The %s approve: you fight their enemies (+%d).",
+                  wbFactionName(f).c_str(), (int)b.pendingToast);
+        wbToast(t);
+        b.pendingToast -= (float)(int)b.pendingToast;
+    }
+}
+
+void wbPeopleOnFelled(Faction* vf, float x, float z)
+{
+    if (!vf || wbIsPlayerFaction(vf)) return;
+    wbWorldOnFelled(vf, x, z);
+    wbContractsOnFelled(vf);
+
+    // the enemy of my enemy...
+    if (!ou || !ou->factionMgr || !ou->player) return;
+    const lektor<Faction*>* all = ou->factionMgr->getAllFactions();
+    if (!all) return;
+    double now = wbWorldMinutes();
+    for (uint32_t i = 0; i < all->size(); ++i)
+    {
+        Faction* f = (*all)[i];
+        if (!f || f == vf || wbIsPlayerFaction(f) || !f->relations) continue;
+        if (!ou->player->isFactionKnown(f)) continue;
+        if (!f->relations->isEnemy(vf)) continue;
+        smallRep(f, g_wb.repPerFelled, now);
+    }
+}
+
+struct RepRow { float rel; std::string name; };
+static bool repLess(const RepRow& a, const RepRow& b) { return a.rel > b.rel; }
+std::string wbReputationSummary()
+{
+    Faction* pf = wbPlayerFaction();
+    if (!pf || !ou || !ou->factionMgr || !ou->player) return std::string("  (no information yet)\n");
+    const lektor<Faction*>* all = ou->factionMgr->getAllFactions();
+    std::vector<RepRow> rows;
+    for (uint32_t i = 0; all && i < all->size(); ++i)
+    {
+        Faction* f = (*all)[i];
+        if (!f || f == pf || !f->relations || !ou->player->isFactionKnown(f)) continue;
+        RepRow r; r.rel = f->relations->getFactionRelation(pf); r.name = wbFactionName(f);
+        rows.push_back(r);
+    }
+    std::sort(rows.begin(), rows.end(), repLess);
+    std::string out; char b[160];
+    for (size_t i = 0; i < rows.size() && i < 16; ++i)
+    {
+        const char* word = rows[i].rel >= 50 ? "allied" : rows[i].rel >= 15 ? "friendly"
+                         : rows[i].rel > -15 ? "neutral" : rows[i].rel > -50 ? "unfriendly" : "hostile";
+        sprintf_s(b, sizeof(b), "  %+4d  %s (%s)\n", (int)rows[i].rel, rows[i].name.c_str(), word);
+        out += b;
+    }
+    if (out.empty()) out = "  You are unknown. Meet people and make a name.\n";
+    return out;
+}
+
+// ------------------------------------------------------------ recruiting
+struct Refusal { Character* c; double until; };
+static std::vector<Refusal> s_refusals;
+
+static Character* firstConsciousPlayerChar()
+{
+    if (!ou || !ou->player) return NULL;
+    const lektor<Character*>& mine = ou->player->getAllPlayerCharacters();
+    for (uint32_t i = 0; i < mine.size(); ++i)
+    {
+        Character* c = mine[i];
+        if (c && !c->isDead() && !c->isUnconcious()) return c;
+    }
+    return NULL;
+}
+
+static void tryRecruit()
+{
+    Character* c = ou->player->selectedCharacter.getCharacter();
+    if (!c) { wbToast("Click a person to select them, then press the recruit key."); return; }
+    if (c->isPlayerCharacter()) { wbToast("They already ride with you."); return; }
+    if (c->isDead() || c->isUnconcious()) { wbToast("They can't hear you right now."); return; }
+    Faction* pf = wbPlayerFaction();
+    Character* leader = firstConsciousPlayerChar();
+    if (!pf || !leader) return;
+
+    double now = wbWorldMinutes();
+    for (size_t i = 0; i < s_refusals.size(); ++i)
+        if (s_refusals[i].c == c && now < s_refusals[i].until) { wbToast("They already gave you their answer. Ask again later."); return; }
+
+    std::string name = c->getName();
+    Faction* vf = c->getFaction();
+    if (vf && vf->relations && vf->relations->isEnemy(pf))
+    {
+        char b[200]; sprintf_s(b, sizeof(b), "%s spits at your feet. (The %s are hostile to you.)", name.c_str(), wbFactionName(vf).c_str());
+        wbToast(b); return;
+    }
+    float rel = (vf && vf->relations) ? vf->relations->getFactionRelation(pf) : 0.0f;
+    int towns = wbTownCount(vf);
+    float chance = g_wb.recruitBase + 0.6f * rel / 100.0f;
+    if (towns == 0) chance += 0.15f;                  // drifters and wanderers
+    if (towns >= 5) chance *= 0.6f;                   // loyal to a great power
+    if (chance < 0.02f) chance = 0.02f;
+    if (chance > 0.95f) chance = 0.95f;
+
+    bool yes = wbRand01() < chance;
+    char lb[200];
+    sprintf_s(lb, sizeof(lb), "[Warborn] recruit %s faction=%s rel=%.0f chance=%.2f -> %d",
+              name.c_str(), wbFactionName(vf).c_str(), rel, chance, yes ? 1 : 0);
+    wbLogAlways(lb);
+    if (!yes)
+    {
+        Refusal r; r.c = c; r.until = now + 10.0; s_refusals.push_back(r);
+        char b[200]; sprintf_s(b, sizeof(b), "%s refuses to join you. (chance %d%%)", name.c_str(), (int)(chance * 100.0f));
+        wbToast(b); return;
+    }
+    c->setFaction(pf, leader->getPlatoon());
+    char b[200]; sprintf_s(b, sizeof(b), "%s has joined your band!", name.c_str());
+    wbNews(b);
+}
+
+// ------------------------------------------------------------ commands
+static const char* const CMD_NAME[4] = { "FOLLOW ME", "HOLD POSITION", "CHARGE!", "FOCUS THEIR LEADER'S FOE" };
+
+static Character* nearestEnemyOf(Character* c, float range)
+{
+    if (!c || !ou) return NULL;
+    Ogre::Vector3 p = c->getPosition();
+    Character* best = NULL; float bestD2 = range * range;
+    auto& chars = ou->getCharacterUpdateList();
+    for (auto it = chars.begin(); it != chars.end(); ++it)
+    {
+        Character* e = *it;
+        if (!e || e == c) continue;
+        Ogre::Vector3 q = e->getPosition();
+        float dx = q.x - p.x, dz = q.z - p.z, d2 = dx * dx + dz * dz;
+        if (d2 >= bestD2) continue;
+        if (e->isDead() || e->isUnconcious() || e->isDown() || !e->isEnemy(c, true)) continue;
+        bestD2 = d2; best = e;
+    }
+    return best;
+}
+
+static void giveCommand(int cmd)
+{
+    Character* leader = ou->player->selectedCharacter.getCharacter();
+    if (!leader || !leader->isPlayerCharacter()) leader = firstConsciousPlayerChar();
+    if (!leader) return;
+    Ogre::Vector3 lp = leader->getPosition();
+    Character* focus = NULL;
+    if (cmd == 3)
+    {
+        focus = nearestEnemyOf(leader, g_wb.cmdRange * 3.0f);
+        if (!focus) { wbToast("No enemy near your leader."); return; }
+    }
+    int n = 0;
+    const lektor<Character*>& mine = ou->player->getAllPlayerCharacters();
+    for (uint32_t i = 0; i < mine.size(); ++i)
+    {
+        Character* c = mine[i];
+        if (!c || c->isDead() || c->isUnconcious() || c->isDown()) continue;
+        if (cmd == 0 && c == leader) continue;
+        Ogre::Vector3 cp = c->getPosition();
+        float dx = cp.x - lp.x, dz = cp.z - lp.z;
+        if (dx * dx + dz * dz > g_wb.cmdRange * g_wb.cmdRange) continue;
+        if (!c->canTakePlayerOrdersAtThisTime()) continue;
+        switch (cmd)
+        {
+            case 0: c->addOrder(NULL, FOLLOW_PLAYER_ORDER, (RootObject*)leader, false, true, lp); break;
+            case 1: c->addOrder(NULL, HOLD_POSITION, NULL, false, true, cp); break;
+            case 2:
+            {
+                Character* foe = nearestEnemyOf(c, g_wb.cmdRange * 3.0f);
+                if (!foe) continue;
+                c->addOrder(NULL, MELEE_ATTACK, (RootObject*)foe, false, true, foe->getPosition());
+                break;
+            }
+            case 3: c->addOrder(NULL, MELEE_ATTACK, (RootObject*)focus, false, true, focus->getPosition()); break;
+        }
+        ++n;
+    }
+    char b[120];
+    if (n > 0) sprintf_s(b, sizeof(b), "Your people (%d): %s", n, CMD_NAME[cmd]);
+    else       sprintf_s(b, sizeof(b), "%s - nobody near your leader can hear you.", CMD_NAME[cmd]);
+    wbToast(b);
+    char lb[96]; sprintf_s(lb, sizeof(lb), "[Warborn] command %d given=%d", cmd, n);
+    wbLog(lb);
+}
+
+// ------------------------------------------------------------ frame
+void wbPeopleFrame()
+{
+    if (!ou || !ou->player) return;
+    if (g_wbRecruitPressed) tryRecruit();
+    for (int i = 0; i < 4; ++i) if (g_wbCmdPressed[i]) giveCommand(i);
+}
+
+void wbPeopleReset()
+{
+    s_rep.clear();
+    s_refusals.clear();
+}
