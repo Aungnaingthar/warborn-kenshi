@@ -9,8 +9,8 @@
 #include <kenshi/CharMovement.h>
 #include <kenshi/util/UtilityT.h>       // traceNoActors — detached OTS camera collision
 #include <kenshi/CharStats.h>
-#include <kenshi/CombatClass.h>
-#include <kenshi/CombatTechniqueData.h>  // manual dodge: isDodge technique filter
+#include <kenshi/combat/CombatClass.h>
+#include <kenshi/combat/CombatTechniqueData.h>  // manual dodge: isDodge technique filter
 #include <kenshi/CameraClass.h>
 #include <kenshi/Globals.h>
 #include <kenshi/OptionsHolder.h>
