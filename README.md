@@ -11,7 +11,7 @@ Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 - `main`: the earlier Direct Control-based base, kept for reference.
 - `phase1-combat`: the earlier combat experiments.
 
-## Features (v0.1)
+## Features (v0.2)
 
 | | |
 |---|---|
@@ -23,6 +23,13 @@ Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 | **Recruiting** | Select anyone and press **Y**. Your standing with their faction decides whether they join. |
 | **Commands** | **F5** follow me, **F6** hold position, **F7** charge, **F8** focus the nearest enemy. |
 | **Realistic combat** | A speed cap for everyone, with skill turned into precision (skill gap and armour exposure scale damage). |
+| **Fair battles** | No more 10-on-1 dogpiles: at most 2 attackers per target, and the rest spread out over the enemy line. |
+| **Diplomacy** | Factions worn out by war agree truces; when one power grows too big, its enemies form a coalition against it. |
+| **Renown** | Personal fame with eight titles, announced by messengers. Makes people more willing to join you. |
+| **Warband** | People you command with missions, not control: take a town or camp (it becomes yours), patrol, return. |
+| **Territory map** | Journal Map tab: every town in its owner's colour, sieges marked, each power's wars and pacts. |
+| **Saved with your game** | News, renown, pacts, grudges, contracts and your warband are stored per save. |
+| **Original dialogue** | Many varied lines for rumours, war news, conquests, pacts and recruit answers. |
 
 ## Controls
 
@@ -34,6 +41,10 @@ Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 | `F6` | Hold position |
 | `F7` | Charge (each attacks the enemy nearest to them) |
 | `F8` | Focus (everyone attacks the enemy nearest your selected character) |
+| `B` | Add / remove the selected person to / from your warband |
+| `U` | Warband: take the nearest enemy town or camp |
+| `I` | Warband: patrol around your selected character |
+| `O` | Warband: return to your selected character |
 
 Every key and number is in `Warborn.ini`.
 

@@ -104,6 +104,7 @@
     <ClCompile Include="src\Lines.cpp" />
     <ClCompile Include="src\Battle.cpp" />
     <ClCompile Include="src\Persist.cpp" />
+    <ClCompile Include="src\Warband.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Warborn.h" />

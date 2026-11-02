@@ -44,6 +44,9 @@ struct WbConfig
     // commands
     int   cmdKeys[4];
     float cmdRange;
+    // warband (command-only missions)
+    int   warbandKeys[4];       // add/remove, take a place, patrol, return
+    bool  playerConquest;       // a place your warband clears becomes yours
     // ui
     int   journalKey;
 };
@@ -139,6 +142,12 @@ void wbCombatInstall(const char* iniPath);    // reads settings, installs the sp
 void wbBattleInstall(const char* iniPath);    // fair battles: spread attackers across enemies
 // Any thread: scale a melee hit by skill gap and armour (everyone, NPCs too).
 void wbCombatBeforeHit(Character* victim, Character* attacker, Damages& damage);
+
+// ------------------------------------------------------------ warband (Warband.cpp)
+void wbWarbandFrame();
+void wbWarbandReset();
+std::string wbWarbandSummary();
+void wbWarbandSave(std::vector<std::string>& out);   void wbWarbandLoad(const std::vector<std::string>& in);
 
 // ------------------------------------------------------------ contracts
 void wbContractsFrame();

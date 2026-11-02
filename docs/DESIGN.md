@@ -43,12 +43,21 @@ A living-world overhaul for Kenshi, built as an RE_Kenshi plugin with KenshiLib.
 - Journal window (J) with four tabs: News, Wars (running wars + power ranking), Contracts (Accept buttons), Reputation.
 - Thread-safe: the main loop builds the text, the UI thread only shows it.
 
-## Roadmap
-- **Diplomacy:** truces after long wars, alliances against the strongest power.
-- **Renown:** a personal fame score with titles, affecting recruiting.
-- **Varied dialogue:** many original lines for messengers, rumours and recruit answers.
-- **Saving:** the world state survives save/load.
-- **Your own nation:** found a faction, hold towns, tax them, defend them.
+## Done since v1
+- **Diplomacy:** truces and coalitions (balance of power).
+- **Renown** with titles; **original dialogue** pools.
+- **Fair battles:** attackers spread across enemies.
+- **Warband missions:** take a place (player conquest), patrol, return.
+- **Territory and diplomacy map** in the journal.
+- **Saving** per save game.
+
+## Roadmap (requested next)
+- **Two kinds of recruits:** join your squad (you control them) *or* join your warband (you only command them). Ask at recruit time.
+- **Trade:** factions you're friendly with offer better prices; caravans between towns; trade contracts.
+- **Prisoners:** capture, imprison and put prisoners to work (Kenshi has slave-labour tasks to build on).
+- **Your own nation:** towns you take pay taxes, need guards, and can be attacked.
+- **Age, family, marriage:** characters age over in-game days; bonds between your people; children appear as young adults (Kenshi has no child models).
+- **More clothes:** needs 3D models. Clothing mods from other authors work alongside Warborn.
 - **Founding new settlements:** needs research into Kenshi's town creation.
 - **FCS content:** original factions, characters, dialogue trees and quests, made in the FCS editor.
 

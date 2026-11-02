@@ -139,6 +139,11 @@ void wbLoadConfig(const char* path)
     g_wb.cmdKeys[3]        = iniKey(path, "CmdFocusKey",     "F8");
     g_wb.cmdRange          = iniF(path, "CommandRange",      150.0f);
     g_wb.journalKey        = iniKey(path, "JournalKey",      "J");
+    g_wb.warbandKeys[0]    = iniKey(path, "WarbandAddKey",    "B");
+    g_wb.warbandKeys[1]    = iniKey(path, "WarbandTakeKey",   "U");
+    g_wb.warbandKeys[2]    = iniKey(path, "WarbandPatrolKey", "I");
+    g_wb.warbandKeys[3]    = iniKey(path, "WarbandReturnKey", "O");
+    g_wb.playerConquest    = iniB(path, "PlayerConquest",    true);
     if (g_wb.maxWars < 1) g_wb.maxWars = 1;
     if (g_wb.warIntervalMin < 0.5f) g_wb.warIntervalMin = 0.5f;
     if (g_wb.resolveMin < 1.0f) g_wb.resolveMin = 1.0f;
@@ -173,6 +178,7 @@ static bool keyPressed(int vk)
 // read by People.cpp
 bool g_wbRecruitPressed = false;
 bool g_wbCmdPressed[4]  = { false, false, false, false };
+bool g_wbWarbandKeys[4] = { false, false, false, false };
 static volatile bool s_journalTogglePending = false;
 
 static void pollKeys()
@@ -181,6 +187,7 @@ static void pollKeys()
     bool textInput = gui && gui->inDialogue();
     g_wbRecruitPressed = keyPressed(g_wb.recruitKey) && fg && !textInput;
     for (int i = 0; i < 4; ++i) g_wbCmdPressed[i] = keyPressed(g_wb.cmdKeys[i]) && fg;
+    for (int i = 0; i < 4; ++i) g_wbWarbandKeys[i] = keyPressed(g_wb.warbandKeys[i]) && fg && !textInput;
     if (keyPressed(g_wb.journalKey) && fg && !textInput) s_journalTogglePending = true;
 }
 
@@ -198,6 +205,7 @@ static void resetAll(const char* why)
     wbWorldReset();
     wbPeopleReset();
     wbContractsReset();
+    wbWarbandReset();
     wbUiReset();
     s_worldMinutes = 0.0;
     char b[96]; sprintf_s(b, sizeof(b), "[Warborn] reset (%s)", why); DebugLog(b);
@@ -233,6 +241,7 @@ static void mainLoop_hook(GameWorld* thisptr, float time)
     wbWorldFrame();
     wbPeopleFrame();
     wbContractsFrame();
+    wbWarbandFrame();
     wbUiMainFrame();
 }
 
