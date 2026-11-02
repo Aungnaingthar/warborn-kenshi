@@ -58,6 +58,14 @@ int wbTownCount(Faction* f)
     return (int)f->warMgr->myTowns.size();
 }
 float wbRand01() { return (float)rand() / (float)RAND_MAX; }
+Faction* wbFindFaction(const std::string& name)
+{
+    if (!ou || !ou->factionMgr || name.empty()) return NULL;
+    const lektor<Faction*>* all = ou->factionMgr->getAllFactions();
+    for (uint32_t i = 0; all && i < all->size(); ++i)
+        if ((*all)[i] && (*all)[i]->getName() == name) return (*all)[i];
+    return NULL;
+}
 
 // ===================================================================
 // world clock: real minutes running unpaused since the save loaded
@@ -208,6 +216,7 @@ static void mainLoop_hook(GameWorld* thisptr, float time)
     {
         s_wasLive = live;
         if (!live) resetAll("world unloading");
+        else { resetAll("world loaded"); wbPersistLoad(); }
         s_lastTick = GetTickCount64();
     }
     if (!live) return;
@@ -299,8 +308,11 @@ __declspec(dllexport) void startPlugin()
         char* slash = strrchr(path, '\\');
         if (slash) slash[1] = 0;
     }
+    char folder[MAX_PATH];
+    strcpy_s(folder, sizeof(folder), path);              // the mod folder, with a trailing slash
     strcat_s(path, sizeof(path), "Warborn.ini");
     wbLoadConfig(path);
+    wbPersistInstall(folder);
     wbCombatInstall(path);
     wbBattleInstall(path);
 

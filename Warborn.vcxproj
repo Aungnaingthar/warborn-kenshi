@@ -103,6 +103,7 @@
     <ClCompile Include="src\Ui.cpp" />
     <ClCompile Include="src\Lines.cpp" />
     <ClCompile Include="src\Battle.cpp" />
+    <ClCompile Include="src\Persist.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Warborn.h" />

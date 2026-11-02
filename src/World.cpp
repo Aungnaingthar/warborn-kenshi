@@ -29,6 +29,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #include <vector>
 #include <algorithm>
@@ -597,6 +598,54 @@ void wbWorldMap(std::vector<WbMapDot>& dots, std::string& legend)
     }
     if (legend.empty()) legend = "No territory is known yet.";
     else legend += "\n#FF5050!#FFFFFF = under siege   #FFD040o#FFFFFF = yours";
+}
+
+// ------------------------------------------------------------ saving
+void wbWorldSave(std::vector<std::string>& out)
+{
+    double now = wbWorldMinutes();
+    char b[64];
+    for (size_t i = 0; i < s_pacts.size(); ++i)
+    {
+        const Pact& p = s_pacts[i];
+        if (now >= p.until) continue;
+        sprintf_s(b, sizeof(b), "%d\t%.1f", p.kind, p.until - now);
+        out.push_back(std::string("pact\t") + b + "\t" + wbClean(wbFactionName(p.a)) + "\t" + wbClean(wbFactionName(p.b))
+                      + "\t" + (p.against ? wbClean(wbFactionName(p.against)) : std::string("-")));
+    }
+    for (size_t i = 0; i < s_minds.size(); ++i)
+    {
+        const FacMind& m = s_minds[i];
+        if (!m.grudge || !m.lostTown || now >= m.grudgeUntil) continue;
+        sprintf_s(b, sizeof(b), "%.1f", m.grudgeUntil - now);
+        out.push_back(std::string("grudge\t") + b + "\t" + wbClean(wbFactionName(m.f)) + "\t" + wbClean(wbFactionName(m.grudge))
+                      + "\t" + wbClean(wbTownName(m.lostTown)));
+    }
+}
+void wbWorldLoad(const std::vector<std::string>& in)
+{
+    refreshMinds();
+    double now = wbWorldMinutes();
+    for (size_t i = 0; i < in.size(); ++i)
+    {
+        std::vector<std::string> f = wbSplit(in[i]);
+        if (f[0] == "pact" && f.size() >= 6)
+        {
+            Pact p; p.kind = atoi(f[1].c_str()); p.until = now + atof(f[2].c_str());
+            p.a = wbFindFaction(f[3]); p.b = wbFindFaction(f[4]); p.against = (f[5] == "-") ? NULL : wbFindFaction(f[5]);
+            if (p.a && p.b && (p.kind == PACT_TRUCE || p.against)) s_pacts.push_back(p);
+        }
+        else if (f[0] == "grudge" && f.size() >= 5)
+        {
+            FacMind* m = mindOf(wbFindFaction(f[2]));
+            Faction* g = wbFindFaction(f[3]);
+            if (!m || !g || !g->warMgr) continue;
+            lektor<TownBase*>& towns = g->warMgr->myTowns;
+            for (uint32_t k = 0; k < towns.size(); ++k)
+                if (towns[k] && wbTownName(towns[k]) == f[4])
+                { m->grudge = g; m->lostTown = towns[k]; m->grudgeUntil = now + atof(f[1].c_str()); break; }
+        }
+    }
 }
 
 struct PowerRow { int towns; std::string name; };

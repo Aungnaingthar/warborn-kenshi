@@ -77,6 +77,17 @@ void        wbAddRenown(float amount, const char* why);
 float       wbRenown();
 const char* wbRenownTitle();
 
+// ------------------------------------------------------------ saving (Persist.cpp)
+void wbPersistInstall(const char* modFolder);   // hooks Kenshi's save
+void wbPersistLoad();                           // after a save is loaded
+std::vector<std::string> wbSplit(const std::string& line);   // tab-separated fields
+std::string wbClean(const std::string& s);                   // strip tabs/newlines
+Faction* wbFindFaction(const std::string& name);
+void wbWorldSave(std::vector<std::string>& out);     void wbWorldLoad(const std::vector<std::string>& in);
+void wbPeopleSave(std::vector<std::string>& out);    void wbPeopleLoad(const std::vector<std::string>& in);
+void wbContractsSave(std::vector<std::string>& out); void wbContractsLoad(const std::vector<std::string>& in);
+void wbUiSave(std::vector<std::string>& out);        void wbUiLoad(const std::vector<std::string>& in);
+
 // ------------------------------------------------------------ ui
 void wbToast(const char* text);               // one line at the top for a few seconds
 void wbNews(const char* text);                // toast + journal entry

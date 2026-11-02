@@ -360,6 +360,18 @@ void wbUiFrame()
     if (s_win && s_win->getVisible()) applyBody();
 }
 
+void wbUiSave(std::vector<std::string>& out)
+{
+    for (size_t i = s_news.size(); i-- > 0; ) out.push_back("news\t" + wbClean(s_news[i]));   // oldest first
+}
+void wbUiLoad(const std::vector<std::string>& in)
+{
+    for (size_t i = 0; i < in.size(); ++i)
+        if (in[i].compare(0, 5, "news\t") == 0) s_news.push_front(in[i].substr(5));
+    while (s_news.size() > 40) s_news.pop_back();
+    s_rebuildNow = true;
+}
+
 void wbUiReset()
 {
     s_news.clear();

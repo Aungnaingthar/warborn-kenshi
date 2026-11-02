@@ -20,6 +20,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <vector>
 
 enum ContractKind { CK_HUNT = 0, CK_DEFEND, CK_ASSAULT };
@@ -227,6 +228,33 @@ std::string wbContractsSummary()
     if (s_active.empty()) out += "  none\n";
     for (size_t i = 0; i < s_active.size(); ++i) { out += "  - "; out += describe(s_active[i], true); out += "\n"; }
     return out;
+}
+
+void wbContractsSave(std::vector<std::string>& out)
+{
+    char b[64];
+    for (size_t i = 0; i < s_active.size(); ++i)
+    {
+        const Contract& c = s_active[i];
+        if (c.kind != CK_HUNT) continue;                     // war contracts end with their war
+        sprintf_s(b, sizeof(b), "%d\t%d\t%.1f", c.need, c.have, c.reward);
+        out.push_back("hunt\t" + wbClean(c.giverName) + "\t" + wbClean(c.targetName) + "\t" + b);
+    }
+}
+void wbContractsLoad(const std::vector<std::string>& in)
+{
+    for (size_t i = 0; i < in.size(); ++i)
+    {
+        std::vector<std::string> f = wbSplit(in[i]);
+        if (f[0] != "hunt" || f.size() < 6) continue;
+        Contract c;
+        c.kind = CK_HUNT; c.giver = wbFindFaction(f[1]); c.target = wbFindFaction(f[2]);
+        if (!c.giver || !c.target) continue;
+        c.giverName = f[1]; c.targetName = f[2]; c.warId = 0;
+        c.need = atoi(f[3].c_str()); c.have = atoi(f[4].c_str()); c.reward = (float)atof(f[5].c_str());
+        c.expires = 0.0;
+        s_active.push_back(c);
+    }
 }
 
 void wbContractsReset()

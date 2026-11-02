@@ -31,6 +31,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #include <vector>
 #include <algorithm>
@@ -321,6 +322,25 @@ void wbPeopleFrame()
     if (!ou || !ou->player) return;
     if (g_wbRecruitPressed) tryRecruit();
     for (int i = 0; i < 4; ++i) if (g_wbCmdPressed[i]) giveCommand(i);
+}
+
+void wbPeopleSave(std::vector<std::string>& out)
+{
+    char b[64]; sprintf_s(b, sizeof(b), "renown\t%.2f", s_renown);
+    out.push_back(b);
+}
+void wbPeopleLoad(const std::vector<std::string>& in)
+{
+    for (size_t i = 0; i < in.size(); ++i)
+    {
+        std::vector<std::string> f = wbSplit(in[i]);
+        if (f[0] == "renown" && f.size() >= 2)
+        {
+            s_renown = (float)atof(f[1].c_str());
+            s_titleIdx = 0;
+            while (s_titleIdx + 1 < TITLE_COUNT && s_renown >= TITLES[s_titleIdx + 1].at) ++s_titleIdx;   // quietly
+        }
+    }
 }
 
 void wbPeopleReset()
