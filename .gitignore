@@ -427,3 +427,6 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# build output folder (Release DLL lands here)
+/WASDCombatPlugin/
