@@ -14,6 +14,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 class Character;
 class Faction;
@@ -93,6 +94,10 @@ void wbWorldOnFelled(Faction* victimFaction, float x, float z);
 std::string wbWorldSummary();
 std::string wbPowerRanking();
 std::string wbDiplomacySummary();
+// Territory map (main thread): every town as a dot in its owner's colour, and
+// a legend (MyGUI colour tags) of each power, its wars and its pacts.
+struct WbMapDot { float x, z; unsigned int rgb; bool besieged, player; std::string town; };
+void wbWorldMap(std::vector<WbMapDot>& dots, std::string& legend);
 
 // War events the contracts listen to.
 struct WbWarEvent

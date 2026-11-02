@@ -13,6 +13,7 @@
 #include <Windows.h>
 #include <stdio.h>
 #include <deque>
+#include <vector>
 #include <string>
 
 // ------------------------------------------------------------ text helpers
@@ -69,6 +70,9 @@ static volatile int  s_tab         = 0;         // UI -> main
 static volatile int  s_acceptReq   = -1;        // UI -> main (button index)
 static volatile bool s_rebuildNow  = true;      // UI -> main
 static volatile bool s_hideReq     = false;     // main -> UI
+static std::vector<WbMapDot> s_mapDots;         // locked: territory map snapshot
+static std::string s_mapLegend;                 // locked
+static bool        s_mapDirty   = false;        // locked
 static ULONGLONG     s_nextBuild   = 0;
 
 void wbToast(const char* text)
@@ -102,10 +106,19 @@ static MyGUI::TextBox* s_toast      = NULL;
 static bool            s_toastTried = false;
 static MyGUI::Window*  s_win        = NULL;
 static MyGUI::TextBox* s_body       = NULL;
-static MyGUI::Button*  s_tabs[4]    = { NULL, NULL, NULL, NULL };
+static const int      TAB_COUNT    = 5;
+static const int      TAB_MAP      = 4;
+static MyGUI::Button*  s_tabs[TAB_COUNT] = { NULL, NULL, NULL, NULL, NULL };
 static MyGUI::Button*  s_accept[4]  = { NULL, NULL, NULL, NULL };
 static bool            s_winTried   = false;
-static const char* const TAB_NAME[4] = { "News", "Wars", "Contracts", "Reputation" };
+static const char* const TAB_NAME[TAB_COUNT] = { "News", "Wars", "Contracts", "Reputation", "Map" };
+// territory map widgets (created on first use)
+static const int       MAX_DOTS     = 160;
+static MyGUI::Widget*  s_mapPanel   = NULL;
+static MyGUI::TextBox* s_legend     = NULL;
+static MyGUI::Widget*  s_dot[MAX_DOTS];
+static MyGUI::TextBox* s_lbl[MAX_DOTS];
+static int             s_dotsMade   = 0;
 
 static void ensureToast()
 {
@@ -130,7 +143,7 @@ static void ensureToast()
 
 static void onTab(MyGUI::Widget* sender)
 {
-    for (int i = 0; i < 4; ++i) if (sender == s_tabs[i]) s_tab = i;
+    for (int i = 0; i < TAB_COUNT; ++i) if (sender == s_tabs[i]) s_tab = i;
     s_rebuildNow = true;
 }
 static void onAccept(MyGUI::Widget* sender)
@@ -153,9 +166,9 @@ static void ensureWindow()
         if (!s_win) return;
         s_win->setCaption("Warborn Journal");
         MyGUI::Widget* client = s_win->getClientWidget();
-        for (int i = 0; i < 4; ++i)
+        for (int i = 0; i < TAB_COUNT; ++i)
         {
-            s_tabs[i] = client->createWidgetReal<MyGUI::Button>("Kenshi_Button1", 0.02f + 0.2f * (float)i, 0.01f, 0.19f, 0.07f,
+            s_tabs[i] = client->createWidgetReal<MyGUI::Button>("Kenshi_Button1", 0.02f + 0.16f * (float)i, 0.01f, 0.15f, 0.07f,
                                                                 MyGUI::Align::Default, "");
             s_tabs[i]->setCaption(TAB_NAME[i]);
             s_tabs[i]->eventMouseButtonClick += MyGUI::newDelegate(onTab);
@@ -177,6 +190,16 @@ static void ensureWindow()
             s_accept[i]->eventMouseButtonClick += MyGUI::newDelegate(onAccept);
             s_accept[i]->setVisible(false);
         }
+        // territory map: a dark panel on the left, the legend on the right
+        s_mapPanel = client->createWidgetReal<MyGUI::Widget>("WhiteSkin", 0.02f, 0.11f, 0.60f, 0.86f, MyGUI::Align::Default, "");
+        s_mapPanel->setColour(MyGUI::Colour(0.10f, 0.09f, 0.07f, 1.0f));
+        s_mapPanel->setNeedMouseFocus(false);
+        s_mapPanel->setVisible(false);
+        s_legend = client->createWidgetReal<MyGUI::TextBox>("Kenshi_TextboxStandardText_Small", 0.64f, 0.11f, 0.35f, 0.86f,
+                                                           MyGUI::Align::Default, "");
+        s_legend->setTextAlign(MyGUI::Align::Left | MyGUI::Align::Top);
+        s_legend->setNeedMouseFocus(false);
+        s_legend->setVisible(false);
         s_win->setVisible(false);
         wbLogAlways("[Warborn] journal window created");
     }
@@ -207,8 +230,64 @@ static void buildBody()
     }
     std::string wrapped = wrap(t, 110);
     int offers = wbContractsOfferCount();
+    std::vector<WbMapDot> dots; std::string legend;
+    if (s_tab == TAB_MAP) wbWorldMap(dots, legend);
     WbGuard g;
     s_bodyText = wrapped; s_bodyOffers = offers; s_bodyDirty = true;
+    if (s_tab == TAB_MAP) { s_mapDots.swap(dots); s_mapLegend = legend; s_mapDirty = true; }
+}
+
+// UI thread: lay the towns out on the map panel.
+static void applyMap()
+{
+    if (!s_mapPanel || !s_legend) return;
+    std::vector<WbMapDot> dots; std::string legend; bool dirty = false;
+    {
+        WbGuard g;
+        if (s_mapDirty) { dots = s_mapDots; legend = s_mapLegend; dirty = true; s_mapDirty = false; }
+    }
+    if (!dirty) return;
+    s_legend->setCaption(legend);
+    int n = (int)dots.size(); if (n > MAX_DOTS) n = MAX_DOTS;
+    float minX = 1e30f, maxX = -1e30f, minZ = 1e30f, maxZ = -1e30f;
+    for (int i = 0; i < n; ++i)
+    {
+        if (dots[i].x < minX) minX = dots[i].x; if (dots[i].x > maxX) maxX = dots[i].x;
+        if (dots[i].z < minZ) minZ = dots[i].z; if (dots[i].z > maxZ) maxZ = dots[i].z;
+    }
+    int pw = s_mapPanel->getWidth(), ph = s_mapPanel->getHeight();
+    float spanX = maxX - minX, spanZ = maxZ - minZ;
+    if (spanX < 1.0f) spanX = 1.0f; if (spanZ < 1.0f) spanZ = 1.0f;
+    float scale = ((float)pw - 40.0f) / spanX;
+    if (((float)ph - 40.0f) / spanZ < scale) scale = ((float)ph - 40.0f) / spanZ;
+    float offX = ((float)pw - spanX * scale) * 0.5f, offZ = ((float)ph - spanZ * scale) * 0.5f;
+    bool labels = n <= 90;
+    for (int i = 0; i < n; ++i)
+    {
+        if (i >= s_dotsMade)
+        {
+            s_dot[i] = s_mapPanel->createWidget<MyGUI::Widget>("WhiteSkin", 0, 0, 8, 8, MyGUI::Align::Default, "");
+            s_dot[i]->setNeedMouseFocus(false);
+            s_lbl[i] = s_mapPanel->createWidget<MyGUI::TextBox>("Kenshi_TextboxStandardText_Small", 0, 0, 160, 16, MyGUI::Align::Default, "");
+            s_lbl[i]->setNeedMouseFocus(false);
+            s_dotsMade = i + 1;
+        }
+        int px = (int)(offX + (dots[i].x - minX) * scale), py = (int)(offZ + (dots[i].z - minZ) * scale);
+        int size = dots[i].player ? 10 : 8;
+        unsigned int c = dots[i].rgb;
+        s_dot[i]->setCoord(px - size / 2, py - size / 2, size, size);
+        s_dot[i]->setColour(MyGUI::Colour((float)((c >> 16) & 255) / 255.0f, (float)((c >> 8) & 255) / 255.0f, (float)(c & 255) / 255.0f, 1.0f));
+        s_dot[i]->setVisible(true);
+        if (labels)
+        {
+            std::string cap = dots[i].besieged ? "#FF5050! #DDDDDD" + dots[i].town : "#BBBBBB" + dots[i].town;
+            s_lbl[i]->setCaption(cap);
+            s_lbl[i]->setPosition(px + 6, py - 8);
+            s_lbl[i]->setVisible(true);
+        }
+        else s_lbl[i]->setVisible(false);
+    }
+    for (int i = n; i < s_dotsMade; ++i) { s_dot[i]->setVisible(false); s_lbl[i]->setVisible(false); }
 }
 
 // UI thread: show the finished text.
@@ -220,10 +299,15 @@ static void applyBody()
         WbGuard g;
         if (s_bodyDirty) { t = s_bodyText; offers = s_bodyOffers; dirty = true; s_bodyDirty = false; }
     }
+    if (s_tab == TAB_MAP) applyMap();
+    bool map = (s_tab == TAB_MAP);
+    if (s_mapPanel && s_mapPanel->getVisible() != map) s_mapPanel->setVisible(map);
+    if (s_legend && s_legend->getVisible() != map) s_legend->setVisible(map);
+    if (s_body->getVisible() == map) s_body->setVisible(!map);
     if (!dirty) return;
     s_body->setCaption(t);
     for (int i = 0; i < 4; ++i) if (s_accept[i]) s_accept[i]->setVisible(s_tab == 2 && i < offers);
-    for (int i = 0; i < 4; ++i) if (s_tabs[i]) s_tabs[i]->setStateSelected(i == s_tab);
+    for (int i = 0; i < TAB_COUNT; ++i) if (s_tabs[i]) s_tabs[i]->setStateSelected(i == s_tab);
 }
 
 // Main thread, once per frame: accept clicks, rebuild the open tab.
@@ -279,6 +363,6 @@ void wbUiFrame()
 void wbUiReset()
 {
     s_news.clear();
-    { WbGuard g; s_toastUntil = 0; s_bodyDirty = false; }
+    { WbGuard g; s_toastUntil = 0; s_bodyDirty = false; s_mapDots.clear(); s_mapDirty = false; }
     s_hideReq = true;
 }

@@ -531,6 +531,74 @@ std::string wbWorldSummary()
     return out;
 }
 
+// ------------------------------------------------------------ territory map
+static unsigned int factionColour(Faction* f)
+{
+    if (wbIsPlayerFaction(f)) return 0xFFD040;                         // you: gold
+    std::string n = wbFactionName(f);
+    unsigned int h = 2166136261u;
+    for (size_t i = 0; i < n.size(); ++i) { h ^= (unsigned char)n[i]; h *= 16777619u; }
+    float hue = (float)(h % 360) / 60.0f;                               // a stable, bright colour per faction
+    float c = 0.85f, x = c * (1.0f - fabsf(fmodf(hue, 2.0f) - 1.0f)), m = 0.12f;
+    float r = 0, g = 0, b = 0;
+    if (hue < 1)      { r = c; g = x; } else if (hue < 2) { r = x; g = c; } else if (hue < 3) { g = c; b = x; }
+    else if (hue < 4) { g = x; b = c; } else if (hue < 5) { r = x; b = c; } else { r = c; b = x; }
+    return ((unsigned int)((r + m) * 255.0f) << 16) | ((unsigned int)((g + m) * 255.0f) << 8) | (unsigned int)((b + m) * 255.0f);
+}
+static bool besieged(TownBase* t)
+{
+    for (size_t i = 0; i < s_plans.size(); ++i) if (s_plans[i].stage == STAGE_MARCHING && s_plans[i].ev.town == t) return true;
+    return false;
+}
+struct LegendRow { int towns; Faction* f; };
+static bool legendLess(const LegendRow& a, const LegendRow& b) { return a.towns > b.towns; }
+
+void wbWorldMap(std::vector<WbMapDot>& dots, std::string& legend)
+{
+    dots.clear(); legend.clear();
+    if (s_minds.empty()) refreshMinds();
+    std::vector<LegendRow> rows;
+    for (size_t i = 0; i < s_minds.size(); ++i)
+    {
+        Faction* f = s_minds[i].f;
+        if (!f || !f->warMgr) continue;
+        lektor<TownBase*>& towns = f->warMgr->myTowns;
+        if (towns.size() == 0) continue;
+        unsigned int col = factionColour(f);
+        for (uint32_t k = 0; k < towns.size(); ++k)
+        {
+            TownBase* t = towns[k];
+            if (!t) continue;
+            Ogre::Vector3 p = t->getPosition();
+            WbMapDot d; d.x = p.x; d.z = p.z; d.rgb = col; d.besieged = besieged(t);
+            d.player = wbIsPlayerFaction(f); d.town = wbTownName(t);
+            dots.push_back(d);
+        }
+        LegendRow r; r.towns = (int)towns.size(); r.f = f; rows.push_back(r);
+    }
+    std::sort(rows.begin(), rows.end(), legendLess);
+    char b[160];
+    for (size_t i = 0; i < rows.size() && i < 14; ++i)
+    {
+        Faction* f = rows[i].f;
+        sprintf_s(b, sizeof(b), "#%06X o #FFFFFF%s (%d)\n", factionColour(f), wbFactionName(f).c_str(), rows[i].towns);
+        legend += b;
+        std::string wars, pacts;
+        int nw = 0;
+        for (size_t k = 0; k < rows.size(); ++k)
+        {
+            Faction* g = rows[k].f;
+            if (g == f || !f->relations) continue;
+            if (atPeace(f, g)) { pacts += (pacts.empty() ? "" : ", ") + wbFactionName(g); continue; }
+            if (f->relations->isEnemy(g) && nw < 4) { wars += (wars.empty() ? "" : ", ") + wbFactionName(g); ++nw; }
+        }
+        if (!wars.empty())  legend += "#E06060   war: #C8C8C8" + wars + "\n";
+        if (!pacts.empty()) legend += "#60C060   pact: #C8C8C8" + pacts + "\n";
+    }
+    if (legend.empty()) legend = "No territory is known yet.";
+    else legend += "\n#FF5050!#FFFFFF = under siege   #FFD040o#FFFFFF = yours";
+}
+
 struct PowerRow { int towns; std::string name; };
 static bool powerLess(const PowerRow& a, const PowerRow& b) { return a.towns > b.towns; }
 std::string wbPowerRanking()
