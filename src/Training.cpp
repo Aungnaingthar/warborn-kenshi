@@ -39,6 +39,7 @@
 #include <algorithm>
 
 extern bool g_wbTrainPressed;
+extern bool g_wbYardPressed;
 extern bool g_wbTournamentPressed;
 
 // ------------------------------------------------------------ pairs read by the hit hook
@@ -118,6 +119,7 @@ static void giveXp(Character* c, float amount)
     st->xpStat_eventBased(STAT_MELEE_ATTACK,  amount);
     st->xpStat_eventBased(STAT_MELEE_DEFENCE, amount);
     st->xpStat_eventBased(STAT_DODGE,         amount * 0.5f);
+    st->xpStat_eventBased(STAT_TOUGHNESS,     amount * 0.6f);   // taking blows hardens the body (more HP)
     if (s_xpLogs < 30)
     {
         ++s_xpLogs;
@@ -139,6 +141,9 @@ static void orderStop(Character* c)
         c->addOrder(NULL, HOLD_POSITION, NULL, false, true, c->getPosition());
 }
 
+static bool inYard(Character* c);                    // training yard (below)
+static void restAfterBout(Character* c, double now);
+
 static void startBout(Character* a, Character* b, bool tournament)
 {
     Bout t;
@@ -155,6 +160,8 @@ static void endBout(size_t i, Character* winner, const char* how)
 {
     Bout t = s_bouts[i];
     s_bouts.erase(s_bouts.begin() + i);
+    if (inYard(t.a)) restAfterBout(t.a, wbWorldMinutes());
+    if (inYard(t.b)) restAfterBout(t.b, wbWorldMinutes());
     publishPairs();
     orderStop(t.a); orderStop(t.b);
     float minutes = (float)(wbWorldMinutes() - t.start);
@@ -249,12 +256,76 @@ static void startSpar()
     startBout(a, best, false);
 }
 
+// ------------------------------------------------------------ training yard
+// A training ground you mark in your base (Alt+Y). Your people standing in
+// it pair up and spar on their own, rest, and go again.
+static bool          s_yardOn = false;
+static Ogre::Vector3 s_yard(0, 0, 0);
+static double        s_nextYardPairing = 0.0;
+struct YardRest { Character* c; double until; };
+static std::vector<YardRest> s_yardRest;
+
+static bool inYard(Character* c)
+{
+    if (!s_yardOn || !c) return false;
+    Ogre::Vector3 p = c->getPosition();
+    float dx = p.x - s_yard.x, dz = p.z - s_yard.z;
+    return dx * dx + dz * dz <= g_wb.yardRadius * g_wb.yardRadius;
+}
+static bool resting(Character* c, double now)
+{
+    for (size_t i = 0; i < s_yardRest.size(); ++i) if (s_yardRest[i].c == c && now < s_yardRest[i].until) return true;
+    return false;
+}
+static void restAfterBout(Character* c, double now)
+{
+    for (size_t i = 0; i < s_yardRest.size(); ++i) if (s_yardRest[i].c == c) { s_yardRest[i].until = now + g_wb.yardRestSeconds / 60.0; return; }
+    YardRest r; r.c = c; r.until = now + g_wb.yardRestSeconds / 60.0; s_yardRest.push_back(r);
+}
+static void toggleYard()
+{
+    Character* c = selectedOwn();
+    if (!c) { wbToast("Select one of your people standing where the training yard should be, then press Alt+Y."); return; }
+    if (s_yardOn && inYard(c)) { s_yardOn = false; wbToast("The training yard is taken down."); return; }
+    s_yard = c->getPosition(); s_yardOn = true; s_nextYardPairing = 0.0;
+    char b[200];
+    sprintf_s(b, sizeof(b), "Training yard marked here (~%d m across). Send your people into it - they will spar in pairs.",
+              (int)(g_wb.yardRadius / 5.0f));
+    wbNews(b);
+}
+static void yardStep(double now)
+{
+    if (!s_yardOn || now < s_nextYardPairing) return;
+    s_nextYardPairing = now + 0.1;                                   // every ~6 s
+    std::vector<Character*> ready;
+    const lektor<Character*>& mine = ou->player->getAllPlayerCharacters();
+    for (uint32_t i = 0; i < mine.size(); ++i)
+    {
+        Character* c = mine[i];
+        if (!fit(c) || busy(c) || resting(c, now) || !inYard(c)) continue;
+        CombatClass* cc = c->getCombatClass();
+        if (cc && cc->combatModeActive) continue;                     // already fighting something real
+        ready.push_back(c);
+    }
+    while (ready.size() >= 2 && s_bouts.size() < 4)
+    {
+        Character* a = ready[0];
+        size_t bi = 1; float bd = dist2(a, ready[1]);
+        for (size_t k = 2; k < ready.size(); ++k) { float d = dist2(a, ready[k]); if (d < bd) { bd = d; bi = k; } }
+        Character* b = ready[bi];
+        ready.erase(ready.begin() + bi); ready.erase(ready.begin());
+        startBout(a, b, false);
+    }
+}
+
 void wbTrainingFrame()
 {
     if (!ou || !ou->player) return;
     if (g_wbTournamentPressed) startTournament();
     else if (g_wbTrainPressed) startSpar();
+    if (g_wbYardPressed) toggleYard();
     double now = wbWorldMinutes();
+    yardStep(now);
     for (size_t i = 0; i < s_bouts.size(); )
     {
         Bout& t = s_bouts[i];
@@ -311,7 +382,8 @@ std::string wbTrainingSummary()
         char b[80]; sprintf_s(b, sizeof(b), "  Tournament: round %d\n", s_tRound);
         out += b;
     }
-    if (out.empty()) out = "  Nobody is training. (Alt+T spar, Shift+Alt+T tournament)\n";
+    if (s_yardOn) out += "  Training yard: marked - your people inside it spar in pairs (Alt+Y with someone inside removes it)\n";
+    if (out.empty()) out = "  Nobody is training. (Alt+T spar, Shift+Alt+T tournament, Alt+Y mark a training yard)\n";
     return out;
 }
 
@@ -319,8 +391,25 @@ void wbTrainingInit()
 {
     if (!s_lockReady) { InitializeCriticalSection(&s_lock); s_lockReady = true; }
 }
+void wbTrainingSave(std::vector<std::string>& out)
+{
+    if (!s_yardOn) return;
+    char b[96]; sprintf_s(b, sizeof(b), "yard\t%.1f\t%.1f\t%.1f", s_yard.x, s_yard.y, s_yard.z);
+    out.push_back(b);
+}
+void wbTrainingLoad(const std::vector<std::string>& in)
+{
+    for (size_t i = 0; i < in.size(); ++i)
+    {
+        std::vector<std::string> f = wbSplit(in[i]);
+        if (f[0] == "yard" && f.size() >= 4)
+        { s_yard = Ogre::Vector3((float)atof(f[1].c_str()), (float)atof(f[2].c_str()), (float)atof(f[3].c_str())); s_yardOn = true; }
+    }
+}
+
 void wbTrainingReset()
 {
+    s_yardOn = false; s_yardRest.clear(); s_nextYardPairing = 0.0;
     s_bouts.clear(); s_bracket.clear(); s_nextRound.clear(); s_tournament = false;
     publishPairs();
 }

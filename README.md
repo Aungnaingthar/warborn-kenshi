@@ -57,6 +57,7 @@ Every Warborn key uses **Alt**, so nothing clashes with Kenshi's own hotkeys (th
 | `Alt+O` | Warband: return to your selected character |
 | `Alt+T` | Spar: the selected fighter trains 1 vs 1 with the nearest squadmate |
 | `Shift+Alt+T` | Tournament among your nearby fighters |
+| `Alt+Y` | Mark a **training yard** where your selected person stands: your people inside it spar in pairs on their own (again to remove it) |
 | `Alt+M` | Marry the selected person to the nearest unmarried one of your people |
 | `F5` / `F6` / `F7` / `F8` | Your people near your selected character: follow / hold / charge / focus |
 

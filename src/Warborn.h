@@ -52,6 +52,9 @@ struct WbConfig
     float sparDamage;           // damage multiplier in a spar
     float sparSeconds;
     float sparXp;
+    int   yardKey;              // Alt+Y: mark / remove the training yard
+    float yardRadius;
+    float yardRestSeconds;
     // followers
     int   talkKey;              // H
     int   marryKey;             // M
@@ -174,6 +177,7 @@ void wbTrainingInit();
 void wbTrainingFrame();
 void wbTrainingReset();
 std::string wbTrainingSummary();
+void wbTrainingSave(std::vector<std::string>& out); void wbTrainingLoad(const std::vector<std::string>& in);
 // Any thread: blunt the blows between two sparring partners.
 void wbTrainingScaleHit(Character* victim, Character* attacker, Damages& damage);
 

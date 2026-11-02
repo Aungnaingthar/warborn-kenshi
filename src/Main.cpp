@@ -173,6 +173,9 @@ void wbLoadConfig(const char* path)
     g_wb.sparDamage        = iniF(path, "SparDamage",        0.35f);
     g_wb.sparSeconds       = iniF(path, "SparSeconds",       90.0f);
     g_wb.sparXp            = iniF(path, "SparXp",            1.0f);
+    g_wb.yardKey           = iniKey(path, "YardKey",         "ALT+Y");
+    g_wb.yardRadius        = iniF(path, "YardRadius",        120.0f);
+    g_wb.yardRestSeconds   = iniF(path, "YardRestSeconds",   40.0f);
     if (g_wb.maxWars < 1) g_wb.maxWars = 1;
     if (g_wb.warIntervalMin < 0.5f) g_wb.warIntervalMin = 0.5f;
     if (g_wb.resolveMin < 1.0f) g_wb.resolveMin = 1.0f;
@@ -220,7 +223,7 @@ static void snapshotKeys()
 bool g_wbRecruitPressed = false;
 bool g_wbCmdPressed[4]  = { false, false, false, false };
 bool g_wbWarbandKeys[4] = { false, false, false, false };
-bool g_wbTrainPressed = false, g_wbTournamentPressed = false;
+bool g_wbTrainPressed = false, g_wbTournamentPressed = false, g_wbYardPressed = false;
 bool g_wbTalkPressed = false, g_wbMarryPressed = false, g_wbRecruitShift = false;
 static volatile bool s_journalTogglePending = false;
 
@@ -239,6 +242,7 @@ static void pollKeys()
     g_wbTalkPressed  = keyPressed(g_wb.talkKey) && fg && !textInput;
     g_wbMarryPressed = keyPressed(g_wb.marryKey) && fg && !textInput;
     g_wbTournamentPressed = train && shift;
+    g_wbYardPressed = keyPressed(g_wb.yardKey) && fg && !textInput;
     if (keyPressed(g_wb.journalKey) && fg && !textInput) s_journalTogglePending = true;
 }
 
