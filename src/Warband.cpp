@@ -270,6 +270,7 @@ void wbWarbandFrame()
                 if (mine[k] && mine[k]->getName() == s_bandNamesToRestore[i]) { s_band.push_back(mine[k]); break; }
         s_bandNamesToRestore.clear();
     }
+    pruneBand();                                              // nobody gone may be touched below
     if (g_wbWarbandKeys[0]) toggleMember();
     if (g_wbWarbandKeys[1]) startTake();
     if (g_wbWarbandKeys[2]) startPatrol();

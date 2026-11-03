@@ -47,6 +47,7 @@ struct WbConfig
     // warband (command-only missions)
     int   warbandKeys[4];       // add/remove, take a place, patrol, return
     bool  playerConquest;       // a place your warband clears becomes yours
+    int   townTax;              // cats per town you hold, every 10 minutes
     // training
     int   trainKey;             // T = spar, Shift+T = tournament
     float sparDamage;           // damage multiplier in a spar
@@ -86,6 +87,9 @@ Faction*    wbPlayerFaction();
 // The person you clicked: a selected stranger first (Kenshi keeps clicked
 // NPCs in the selected-objects list), otherwise your selected squad member.
 Character*  wbSelectedPerson();
+// True while c is one of the player's people (pointer comparison only - safe
+// to call with a character that may already be gone).
+bool        wbIsOwned(Character* c);
 Character*  wbPersonUnderMouse(float radiusPx);   // Pick.cpp
 std::string wbFactionName(Faction* f);
 std::string wbTownName(TownBase* t);

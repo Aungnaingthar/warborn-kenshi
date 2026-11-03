@@ -138,7 +138,7 @@ static void orderFight(Bout& t)
 }
 static void orderStop(Character* c)
 {
-    if (c && fit(c) && c->canTakePlayerOrdersAtThisTime())
+    if (c && wbIsOwned(c) && fit(c) && c->canTakePlayerOrdersAtThisTime())
         c->addOrder(NULL, HOLD_POSITION, NULL, false, true, c->getPosition());
 }
 
@@ -161,8 +161,8 @@ static void endBout(size_t i, Character* winner, const char* how)
 {
     Bout t = s_bouts[i];
     s_bouts.erase(s_bouts.begin() + i);
-    if (inYard(t.a)) restAfterBout(t.a, wbWorldMinutes());
-    if (inYard(t.b)) restAfterBout(t.b, wbWorldMinutes());
+    if (wbIsOwned(t.a) && inYard(t.a)) restAfterBout(t.a, wbWorldMinutes());
+    if (wbIsOwned(t.b) && inYard(t.b)) restAfterBout(t.b, wbWorldMinutes());
     publishPairs();
     orderStop(t.a); orderStop(t.b);
     float minutes = (float)(wbWorldMinutes() - t.start);
@@ -208,7 +208,7 @@ static void tournamentStep()
     // drop anyone who can't fight any more (they forfeit)
     for (size_t i = 0; i < s_bracket.size(); )
     {
-        if (fit(s_bracket[i])) ++i;
+        if (wbIsOwned(s_bracket[i]) && fit(s_bracket[i])) ++i;
         else s_bracket.erase(s_bracket.begin() + i);
     }
     if (s_bracket.size() >= 2)
@@ -225,6 +225,11 @@ static void tournamentStep()
         char b[80]; sprintf_s(b, sizeof(b), "Tournament: round %d - %d fighters remain.", s_tRound, (int)s_bracket.size());
         wbNews(b);
         return;
+    }
+    for (size_t i = 0; i < s_nextRound.size(); )
+    {
+        if (wbIsOwned(s_nextRound[i])) ++i;
+        else s_nextRound.erase(s_nextRound.begin() + i);
     }
     if (s_nextRound.size() == 1)
     {
@@ -414,6 +419,12 @@ void wbTrainingFrame()
     for (size_t i = 0; i < s_bouts.size(); )
     {
         Bout& t = s_bouts[i];
+        if (!wbIsOwned(t.a) || !wbIsOwned(t.b))                  // one of them is no longer ours: drop quietly
+        {
+            s_bouts.erase(s_bouts.begin() + i);
+            publishPairs();
+            continue;
+        }
         bool aUp = fit(t.a), bUp = fit(t.b);
         if (!aUp || !bUp)
         {
@@ -468,6 +479,7 @@ std::string wbTrainingSummary()
         out += b;
     }
     for (size_t i = 0; i < s_partners.size(); ++i)
+        if (wbIsOwned(s_partners[i].a) && wbIsOwned(s_partners[i].b))
         out += "  Partners at the dummies: " + std::string(s_partners[i].a->getName()) + " & " + s_partners[i].b->getName() + "\n";
     if (s_yardOn) out += "  Training yard: marked - your people inside it spar in pairs (Alt+Y with someone inside removes it)\n";
     if (out.empty()) out = "  Nobody is training. (Alt+T spar, Shift+Alt+T tournament, Alt+Y mark a training yard)\n";

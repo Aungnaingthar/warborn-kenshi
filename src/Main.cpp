@@ -59,6 +59,14 @@ int wbTownCount(Faction* f)
     return (int)f->warMgr->myTowns.size();
 }
 float wbRand01() { return (float)rand() / (float)RAND_MAX; }
+bool wbIsOwned(Character* c)
+{
+    if (!c || !ou || !ou->player) return false;
+    const lektor<Character*>& mine = ou->player->getAllPlayerCharacters();
+    for (uint32_t i = 0; i < mine.size(); ++i) if (mine[i] == c) return true;
+    return false;
+}
+
 Faction* wbFindFaction(const std::string& name)
 {
     if (!ou || !ou->factionMgr || name.empty()) return NULL;
@@ -159,6 +167,7 @@ void wbLoadConfig(const char* path)
     g_wb.warbandKeys[2]    = iniKey(path, "WarbandPatrolKey", "ALT+P");
     g_wb.warbandKeys[3]    = iniKey(path, "WarbandReturnKey", "ALT+O");
     g_wb.playerConquest    = iniB(path, "PlayerConquest",    true);
+    g_wb.townTax           = (int)iniF(path, "TownTax",      250.0f);
     g_wb.trainKey          = iniKey(path, "TrainKey",        "ALT+T");
     g_wb.talkKey           = iniKey(path, "TalkKey",         "ALT+H");
     g_wb.marryKey          = iniKey(path, "MarryKey",        "ALT+M");

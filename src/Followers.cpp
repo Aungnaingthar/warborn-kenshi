@@ -234,7 +234,7 @@ static void marry()
     for (size_t i = 0; i < s_fol.size(); ++i)
     {
         Follower& o = s_fol[i];
-        if (o.c == a || !o.partner.empty() || o.prisoner || o.c->isDead()) continue;
+        if (o.c == a || !wbIsOwned(o.c) || !o.partner.empty() || o.prisoner || o.c->isDead()) continue;
         Ogre::Vector3 q = o.c->getPosition();
         float d2 = (q.x - p.x) * (q.x - p.x) + (q.z - p.z) * (q.z - p.z);
         if (d2 < bestD2) { bestD2 = d2; best = &o; }

@@ -506,6 +506,16 @@ static void realm(double now)
         wbToast(b);
         ++i;
     }
+    // YOUR NATION: towns you hold pay taxes (more as your rank grows)
+    int myTowns = wbTownCount(pf);
+    if (myTowns > 0 && g_wb.townTax > 0)
+    {
+        int tax = (int)((float)(g_wb.townTax * myTowns) * (1.0f + 0.25f * (float)s_rank));
+        wbPayPlayer(tax);
+        char b[160];
+        sprintf_s(b, sizeof(b), "Tax collectors return from your %d town%s: %d cats.", myTowns, myTowns == 1 ? "" : "s", tax);
+        wbNews(b);
+    }
     // fealty: a small faction that loves you asks to serve
     if (s_rank < 2) return;
     for (size_t i = 0; i < s_minds.size(); ++i)
@@ -532,6 +542,16 @@ std::string wbRealmSummary()
         out += b;
     }
     out += "\n";
+    Faction* pf = wbPlayerFaction();
+    if (pf && pf->warMgr && pf->warMgr->myTowns.size() > 0)
+    {
+        out += "  Your towns:";
+        lektor<TownBase*>& mine = pf->warMgr->myTowns;
+        for (uint32_t i = 0; i < mine.size() && i < 12; ++i) if (mine[i]) { out += (i ? ", " : " "); out += wbTownName(mine[i]); }
+        sprintf_s(b, sizeof(b), "  (taxes ~%d cats every 10 min)\n",
+                  (int)((float)(g_wb.townTax * (int)mine.size()) * (1.0f + 0.25f * (float)s_rank)));
+        out += b;
+    }
     if (s_vassals.empty()) out += s_rank >= 2 ? "  No vassals yet. Small factions that love you may swear fealty.\n"
                                               : "  Vassals swear fealty to a Lordship or greater.\n";
     for (size_t i = 0; i < s_vassals.size(); ++i)
