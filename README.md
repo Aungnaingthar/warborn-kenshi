@@ -27,7 +27,7 @@ Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 | **Diplomacy** | Factions worn out by war agree truces; when one power grows too big, its enemies form a coalition against it. |
 | **Renown** | Personal fame with eight titles, announced by messengers. Makes people more willing to join you. |
 | **Warband** | People you command with missions, not control: take a town or camp (it becomes yours), patrol, return. |
-| **Territory map** | Journal Map tab: every town in its owner's colour, sieges marked, each power's wars and pacts. |
+| **Territory map** | On **Kenshi's own world map**: every town marker in its owner's colour, with the owner's name and **[SIEGE]** on towns under attack. Also the journal Map tab: every town in its owner's colour, sieges marked, each power's wars and pacts. |
 | **Saved with your game** | News, renown, pacts, grudges, contracts and your warband are stored per save. |
 | **Original dialogue** | Many varied lines for rumours, war news, conquests, pacts and recruit answers. |
 | **Dummy partners** | Put two of your people on training dummies next to each other: they become partners and learn much faster (including Toughness = more HP), even past the dummy's usual limit. |

@@ -69,6 +69,7 @@ struct WbConfig
     bool  betrayalDesert;       // betrayers may leave for their old faction
     float smithingXpMult;       // easier smithing
     float learnMult;            // all skills
+    bool  mapOverlay;           // colour Kenshi's own map by owner
     // ui
     int   journalKey;
 };
@@ -138,6 +139,9 @@ std::string wbWorldSummary();
 std::string wbPowerRanking();
 std::string wbDiplomacySummary();
 std::string wbRealmSummary();
+unsigned int wbFactionColour(Faction* f);        // 0xRRGGBB, stable per faction (yours: gold)
+bool wbTownBesieged(const void* town);           // any thread
+void wbMapOverlayInstall();                      // MapOverlay.cpp
 // Territory map (main thread): every town as a dot in its owner's colour, and
 // a legend (MyGUI colour tags) of each power, its wars and its pacts.
 struct WbMapDot { float x, z; unsigned int rgb; bool besieged, player; std::string town; };

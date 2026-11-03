@@ -168,6 +168,7 @@ void wbLoadConfig(const char* path)
     g_wb.warbandKeys[3]    = iniKey(path, "WarbandReturnKey", "ALT+O");
     g_wb.playerConquest    = iniB(path, "PlayerConquest",    true);
     g_wb.townTax           = (int)iniF(path, "TownTax",      250.0f);
+    g_wb.mapOverlay        = iniB(path, "MapOverlay",        true);
     g_wb.trainKey          = iniKey(path, "TrainKey",        "ALT+T");
     g_wb.talkKey           = iniKey(path, "TalkKey",         "ALT+H");
     g_wb.marryKey          = iniKey(path, "MarryKey",        "ALT+M");
@@ -405,6 +406,7 @@ __declspec(dllexport) void startPlugin()
     wbPersistInstall(folder);
     wbTrainingInit();
     wbFollowersInstall();
+    if (g_wb.mapOverlay) wbMapOverlayInstall();
     wbCombatInstall(path);
     wbBattleInstall(path);
 

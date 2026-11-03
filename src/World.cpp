@@ -582,6 +582,30 @@ std::string wbDiplomacySummary()
     return out;
 }
 
+// ------------------------------------------------------------ sieges, for the map screen (UI thread)
+static CRITICAL_SECTION s_siegeLock;
+static bool             s_siegeLockReady = false;
+static const void*      s_siegeTowns[16];
+static int              s_siegeN = 0;
+static void publishSieges()
+{
+    if (!s_siegeLockReady) { InitializeCriticalSection(&s_siegeLock); s_siegeLockReady = true; }
+    EnterCriticalSection(&s_siegeLock);
+    s_siegeN = 0;
+    for (size_t i = 0; i < s_plans.size() && s_siegeN < 16; ++i)
+        if (s_plans[i].stage == STAGE_MARCHING) s_siegeTowns[s_siegeN++] = s_plans[i].ev.town;
+    LeaveCriticalSection(&s_siegeLock);
+}
+bool wbTownBesieged(const void* town)
+{
+    if (!s_siegeLockReady || !town) return false;
+    bool yes = false;
+    EnterCriticalSection(&s_siegeLock);
+    for (int i = 0; i < s_siegeN; ++i) if (s_siegeTowns[i] == town) { yes = true; break; }
+    LeaveCriticalSection(&s_siegeLock);
+    return yes;
+}
+
 // ------------------------------------------------------------ frame
 void wbWorldFrame()
 {
@@ -615,6 +639,7 @@ void wbWorldFrame()
         if (s_plans[i].stage < 0) s_plans.erase(s_plans.begin() + i);
         else ++i;
     }
+    publishSieges();
 }
 
 void wbWorldOnFelled(Faction* victimFaction, float x, float z)
@@ -665,7 +690,9 @@ std::string wbWorldSummary()
 }
 
 // ------------------------------------------------------------ territory map
-static unsigned int factionColour(Faction* f)
+unsigned int wbFactionColour(Faction* f);
+static unsigned int factionColour(Faction* f) { return wbFactionColour(f); }
+unsigned int wbFactionColour(Faction* f)
 {
     if (wbIsPlayerFaction(f)) return 0xFFD040;                         // you: gold
     std::string n = wbFactionName(f);
