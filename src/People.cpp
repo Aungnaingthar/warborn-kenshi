@@ -11,8 +11,8 @@
 //   small clans join more easily, people of great powers are more loyal.
 //
 // Commands (you give orders, you don't take control):
-//   F5 follow me, F6 hold position, F7 charge (each picks the nearest enemy),
-//   F8 focus (everyone attacks the enemy nearest the leader). The leader is
+//   Alt+1 follow me, Alt+2 hold position, Alt+3 charge (each picks the nearest enemy),
+//   Alt+4 focus (everyone attacks the enemy nearest the leader). The leader is
 //   your selected character; orders go to your people near them.
 
 #include "Warborn.h"
