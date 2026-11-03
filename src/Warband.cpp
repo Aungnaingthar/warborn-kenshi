@@ -173,13 +173,44 @@ void wbWarbandSet(const std::vector<Character*>& members)
 void wbWarbandMarch(Character* general) { startTakeFrom(general); }
 bool wbWarbandBusy() { return s_mission != MISSION_NONE; }
 
+// An enemy town by name (fresh lookup: never a kept pointer).
+static TownBase* enemyTownNamed(const std::string& name, Faction** ownerOut)
+{
+    Faction* pf = wbPlayerFaction();
+    if (!pf || !ou || !ou->factionMgr || name.empty()) return NULL;
+    const lektor<Faction*>* all = ou->factionMgr->getAllFactions();
+    for (uint32_t i = 0; all && i < all->size(); ++i)
+    {
+        Faction* f = (*all)[i];
+        if (!f || f == pf || !f->warMgr) continue;
+        lektor<TownBase*>& towns = f->warMgr->myTowns;
+        for (uint32_t k = 0; k < towns.size(); ++k)
+            if (towns[k] && wbTownName(towns[k]) == name) { *ownerOut = f; return towns[k]; }
+    }
+    return NULL;
+}
+
+static std::string s_wantTarget;                // set by wbWarbandMarchOn for the next take
+void wbWarbandMarchOn(Character* general, const std::string& townName)
+{
+    s_wantTarget = townName;
+    startTakeFrom(general);
+    s_wantTarget.clear();
+}
+bool wbWarbandMember(Character* c)
+{
+    for (size_t i = 0; i < s_band.size(); ++i) if (s_band[i] == c) return true;
+    return false;
+}
+int wbWarbandSize() { return (int)s_band.size(); }
+
 static void startTakeFrom(Character* lead)
 {
     if (s_band.empty()) { wbToast("Your warband is empty. Select people and press Alt+B to add them."); return; }
     Ogre::Vector3 from = lead ? lead->getPosition() : s_band[0]->getPosition();
     Faction* owner = NULL;
-    TownBase* t = nearestEnemyTown(from, &owner);
-    if (!t) { wbToast("No enemy town or camp is known nearby."); return; }
+    TownBase* t = s_wantTarget.empty() ? nearestEnemyTown(from, &owner) : enemyTownNamed(s_wantTarget, &owner);
+    if (!t) { wbToast(s_wantTarget.empty() ? "No enemy town or camp is known nearby." : "That place is no longer held by an enemy."); return; }
     s_mission = MISSION_TAKE; s_targetTown = t; s_targetOwner = owner; s_targetName = wbTownName(t);
     s_clearSince = -1.0; s_missionStart = wbWorldMinutes(); s_nextThink = 0.0;
     orderMove(t->getPosition());

@@ -75,8 +75,10 @@ struct WbConfig
     bool  courtSquad;           // officers move to their own Court squad
     int   courtMaxPeople;       // the General stops recruiting at this many people
     float drillXp;              // the General drills soldiers near them (per ~3 min)
+    float campaignPrepMin;      // longest the General prepares before marching
     // ui
     int   journalKey;
+    int   courtKey;                // Alt+C: the Court Hall
 };
 extern WbConfig g_wb;
 
@@ -216,6 +218,9 @@ void  wbFollowersSave(std::vector<std::string>& out); void wbFollowersLoad(const
 void  wbWarbandAdd(Character* c);
 void  wbWarbandSet(const std::vector<Character*>& members);
 void  wbWarbandMarch(Character* general);
+void  wbWarbandMarchOn(Character* general, const std::string& townName);
+bool  wbWarbandMember(Character* c);
+int   wbWarbandSize();
 bool  wbWarbandBusy();
 bool  wbJoinBand(Character* c);                       // recruit directly (court General)
 float wbFollowerLoyalty(Character* c);
@@ -226,6 +231,29 @@ void  wbCourtReset();
 void  wbCourtAction(int action);                      // from the journal buttons (main thread)
 std::string wbCourtSummary();
 float wbCourtTaxMult();                               // finance + development bonus on town taxes
+float wbCourtBetrayalMult();                          // Spymaster
+float wbCourtRepMult();                               // Envoy
+std::string wbRealmRankName();                        // World.cpp
+struct WbCourtSlotView { std::string title, name, line; float loyalty; bool filled; };
+struct WbCandView { Character* who; std::string label; };
+struct WbCourtViewData
+{
+    std::string leader, leaderLine, money, food, tax, army;
+    float foodFrac;
+    std::vector<WbCourtSlotView> slots;      // one per office
+    std::vector<WbCandView> cands;           // your people without an office
+    std::string people;                      // "Soldiers 6 - Civilians 12 - Officers 3"
+    std::string campaign;                    // the General's campaign status
+    std::vector<std::string> targets;        // enemy towns, nearest to the General first
+};
+void  wbCourtView(WbCourtViewData& v);                // main thread
+void  wbCourtAppoint(int office, Character* c);       // main thread
+void  wbCourtDismiss(int office);
+void  wbCourtArmy(int delta);                         // -1 / +1, 0 = march
+void  wbCourtCampaign(const std::string& townName);  // the General prepares, then attacks it
+void  wbCourtUiFrame();                               // UI thread (CourtUi.cpp)
+void  wbCourtUiMainFrame();                           // main thread (CourtUi.cpp)
+void  wbCourtUiToggle();                              // UI thread
 bool  wbIsOfficer(Character* c);
 void  wbCourtSave(std::vector<std::string>& out);   void wbCourtLoad(const std::vector<std::string>& in);
 std::string wbLatestNews();                           // newest news line, no time stamp

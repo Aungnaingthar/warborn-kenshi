@@ -540,7 +540,7 @@ void wbFollowersFrame()
             float l = loyalty(f);
             if (l < 40.0f)
             {
-                float chance = (40.0f - l) / 100.0f * TRAIT_BETRAY[f.trait] * g_wb.betrayalRate;
+                float chance = (40.0f - l) / 100.0f * TRAIT_BETRAY[f.trait] * g_wb.betrayalRate * wbCourtBetrayalMult();
                 if (s_origin == OR_SLAVEBORN) chance *= 0.5f;
                 char lb[160]; sprintf_s(lb, sizeof(lb), "[Warborn] loyalty %s %.0f -> betrayal chance %.2f", f.name.c_str(), l, chance);
                 wbLog(lb);

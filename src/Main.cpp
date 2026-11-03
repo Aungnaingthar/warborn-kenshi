@@ -164,6 +164,7 @@ void wbLoadConfig(const char* path)
     g_wb.cmdKeys[3]        = iniKey(path, "CmdFocusKey",     "F8");
     g_wb.cmdRange          = iniF(path, "CommandRange",      150.0f);
     g_wb.journalKey        = iniKey(path, "JournalKey",      "ALT+J");
+    g_wb.courtKey          = iniKey(path, "CourtKey",        "ALT+C");
     g_wb.warbandKeys[0]    = iniKey(path, "WarbandAddKey",    "ALT+B");
     g_wb.warbandKeys[1]    = iniKey(path, "WarbandTakeKey",   "ALT+U");
     g_wb.warbandKeys[2]    = iniKey(path, "WarbandPatrolKey", "ALT+P");
@@ -174,6 +175,7 @@ void wbLoadConfig(const char* path)
     g_wb.courtSquad        = iniB(path, "CourtSquad",        true);
     g_wb.courtMaxPeople    = (int)iniF(path, "CourtMaxPeople", 60.0f);
     g_wb.drillXp           = iniF(path, "DrillXp",           1.0f);
+    g_wb.campaignPrepMin   = iniF(path, "CampaignPrepMin",   6.0f);
     g_wb.trainKey          = iniKey(path, "TrainKey",        "ALT+T");
     g_wb.talkKey           = iniKey(path, "TalkKey",         "ALT+H");
     g_wb.marryKey          = iniKey(path, "MarryKey",        "ALT+M");
@@ -244,6 +246,7 @@ bool g_wbWarbandKeys[4] = { false, false, false, false };
 bool g_wbTrainPressed = false, g_wbTournamentPressed = false, g_wbYardPressed = false;
 bool g_wbTalkPressed = false, g_wbMarryPressed = false, g_wbRecruitShift = false;
 static volatile bool s_journalTogglePending = false;
+static volatile bool s_courtTogglePending = false;
 
 static void pollKeys()
 {
@@ -262,6 +265,7 @@ static void pollKeys()
     g_wbTournamentPressed = train && shift;
     g_wbYardPressed = keyPressed(g_wb.yardKey) && fg && !textInput;
     if (keyPressed(g_wb.journalKey) && fg && !textInput) s_journalTogglePending = true;
+    if (keyPressed(g_wb.courtKey) && fg && !textInput) s_courtTogglePending = true;
 }
 
 // ===================================================================
@@ -322,6 +326,7 @@ static void mainLoop_hook(GameWorld* thisptr, float time)
     wbFollowersFrame();
     wbCourtFrame();
     wbUiMainFrame();
+    wbCourtUiMainFrame();
 }
 
 // While Alt is held, Kenshi's own hotkeys are swallowed, so Alt+R / Alt+B /
@@ -340,7 +345,9 @@ static void cameraUpdate_hook(CameraClass* thisptr, bool controlEnabled)
     s_cameraUpdateOrig(thisptr, controlEnabled);
     if (!ou || !ou->player || thisptr != ou->player->camera) return;
     if (s_journalTogglePending) { s_journalTogglePending = false; wbJournalToggle(); }
+    if (s_courtTogglePending) { s_courtTogglePending = false; wbCourtUiToggle(); }
     wbUiFrame();
+    wbCourtUiFrame();
 }
 
 // Every melee hit in the world. Combat may run on a worker thread, so this

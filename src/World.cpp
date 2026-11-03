@@ -554,13 +554,15 @@ static void realm(double now)
         if (!f || f == pf || !f->relations || isVassal(f)) continue;
         int towns = wbTownCount(f);
         if (towns < 1 || towns > 2 || f->relations->isEnemy(pf)) continue;
-        if (f->relations->getFactionRelation(pf) < 40.0f || wbRand01() > 0.3f) continue;
+        if (f->relations->getFactionRelation(pf) < 40.0f || wbRand01() > 0.3f * (wbCourtRepMult() > 1.0f ? 1.5f : 1.0f)) continue;
         s_vassals.push_back(f);
         wbNews(("The " + wbFactionName(f) + " swear fealty to you. They are now your vassals.").c_str());
         wbAddRenown(4.0f, "a new vassal");
         return;
     }
 }
+
+std::string wbRealmRankName() { return RANKS[s_rank].name; }
 
 std::string wbRealmSummary()
 {

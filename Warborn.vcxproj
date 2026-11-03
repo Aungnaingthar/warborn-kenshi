@@ -111,6 +111,7 @@
     <ClCompile Include="src\Pick.cpp" />
     <ClCompile Include="src\MapOverlay.cpp" />
     <ClCompile Include="src\Court.cpp" />
+    <ClCompile Include="src\CourtUi.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Warborn.h" />

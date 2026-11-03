@@ -40,7 +40,7 @@ Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 | **Trade** | Contracts pay cats. Caravan contracts: invest now, get your share back with profit if their towns stay safe. |
 | **Age and marriage** | Everyone ages; old fighters weaken and can die of old age. **Alt+M** marries two of your people (more loyal together; they grieve if one dies). |
 | **Easier smithing** | Smithing skills learn 3× faster (adjustable). |
-| **Your court** | Journal **Court** tab: appoint a **Finance Minister** (trade, rents, better taxes; a disloyal one embezzles), a **Steward** (develops your towns: merchants rent buildings and open shops, farms fill the food stores; empty stores make your people hungry and unhappy) and a **General** (recruits soldiers on their own, drills the soldiers near them, and leads the army: choose how many soldiers, then **March!** on the nearest enemy town). Officers move to their own Court squad. |
+| **Your court** | The **Court Hall** (**Alt+C**): six coloured office cards under your banner, a candidates list, treasury and food bars. Appoint a **Finance Minister** (trade, rents, better taxes; a disloyal one embezzles), a **Steward** (develops your towns: merchants rent buildings and open shops, farms fill the food stores; empty stores make your people hungry and unhappy) and a **General** who runs the army on his own: he recruits soldiers, drills them, and when you **pick a target city and Order campaign** he prepares the army to the size you set, marches on that city and attacks, then brings the army home. The hall shows **Soldiers / Civilians / Officers** counts. Plus a **Spymaster** (betrayal rarer), an **Envoy** (more reputation, vassals join more readily) and a **Drillmaster** (drills everyone near them). Officers move to their own Court squad. |
 | **Faction economies** | Every faction has a treasury that grows with its towns. Wars cost money: poor factions wait, rich ones raise armies and fight better, and a conquered town costs its owner 30% of the treasury. |
 | **Your nation** | Towns your warband takes are yours: they pay taxes every 10 minutes (more as your rank grows), listed in the journal. |
 | **Rank and vassals** | Your power grows with towns and fame: Wandering Band, Free Company, Lordship, Realm, Kingdom. From Lordship on, small friendly factions may swear fealty, pay tribute and call for help, and they rebel if they stop liking you. |
@@ -51,6 +51,7 @@ Every Warborn key uses **Alt**, so nothing clashes with Kenshi's own hotkeys (th
 
 | Key | Action |
 |---|---|
+| `Alt+C` | **Court Hall**: your officers as coloured cards (loyalty bars), candidates to appoint, treasury and food, the army |
 | `Alt+J` | Journal: News, Wars, Contracts (with Accept buttons), Reputation, Map, People (with Origin buttons) |
 | `Alt+H` | Talk to the person under the mouse (press again for the next topic) |
 | `Alt+R` | Recruit the person under the mouse (a knocked-out one becomes a prisoner) |

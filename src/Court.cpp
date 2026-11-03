@@ -32,6 +32,7 @@
 #include <kenshi/Faction.h>
 #include <kenshi/FactionRelations.h>
 #include <kenshi/FactionWarMgr.h>
+#include <kenshi/Town.h>
 #include <kenshi/Enums.h>
 #include <ogre/OgreVector3.h>
 
@@ -43,10 +44,16 @@
 #include <string>
 #include <algorithm>
 
-enum { OFF_FINANCE = 0, OFF_STEWARD, OFF_GENERAL, OFF_COUNT };
-static const char* const OFFICE_NAME[OFF_COUNT] = { "Finance Minister", "Steward", "General" };
+//   SPYMASTER         watches your people: betrayal becomes rarer. Stealth
+//                     and Perception.
+//   ENVOY             speaks for you: more reputation from everything, small
+//                     factions swear fealty more readily. Science and Perception.
+//   DRILLMASTER       drills everyone near them, like the General, wherever
+//                     they are posted (your base).
+enum { OFF_FINANCE = 0, OFF_STEWARD, OFF_GENERAL, OFF_SPY, OFF_ENVOY, OFF_DRILL, OFF_COUNT };
+static const char* const OFFICE_NAME[OFF_COUNT] = { "Finance Minister", "Steward", "General", "Spymaster", "Envoy", "Drillmaster" };
 
-static Character*   s_off[OFF_COUNT]     = { NULL, NULL, NULL };
+static Character*   s_off[OFF_COUNT]     = { NULL, NULL, NULL, NULL, NULL, NULL };
 static std::string  s_offRestore[OFF_COUNT];
 static ActivePlatoon* s_courtSquad      = NULL;
 static float        s_food              = 60.0f;
@@ -66,6 +73,19 @@ static float stat(Character* c, StatsEnumerated s)
 static float financeSkill(Character* c) { return (stat(c, STAT_SCIENCE) + 0.5f * stat(c, STAT_ENGINEERING)) / 1.5f; }
 static float stewardSkill(Character* c) { return (stat(c, STAT_ENGINEERING) + stat(c, STAT_LABOURING) + stat(c, STAT_FARMING)) / 3.0f; }
 static float generalSkill(Character* c) { return (stat(c, STAT_MELEE_ATTACK) + stat(c, STAT_MELEE_DEFENCE)) / 2.0f; }
+static float spySkill(Character* c)     { return (stat(c, STAT_STEALTH) + stat(c, STAT_PERCEPTION)) / 2.0f; }
+static float envoySkill(Character* c)   { return (stat(c, STAT_SCIENCE) + stat(c, STAT_PERCEPTION)) / 2.0f; }
+static float officeSkill(int o, Character* c)
+{
+    switch (o)
+    {
+        case OFF_FINANCE: return financeSkill(c);
+        case OFF_STEWARD: return stewardSkill(c);
+        case OFF_SPY:     return spySkill(c);
+        case OFF_ENVOY:   return envoySkill(c);
+        default:          return generalSkill(c);           // General, Drillmaster
+    }
+}
 static bool officerOk(int o) { return s_off[o] && wbIsOwned(s_off[o]) && !s_off[o]->isDead(); }
 bool wbIsOfficer(Character* c)
 {
@@ -108,10 +128,22 @@ float wbCourtTaxMult()
 }
 
 // ------------------------------------------------------------ appointing
-static void appoint(int office)
+float wbCourtBetrayalMult()
 {
-    Character* c = ou->player->selectedCharacter.getCharacter();
-    if (!c || !c->isPlayerCharacter()) { wbToast("Select one of your people first, then press the office's button."); return; }
+    if (!officerOk(OFF_SPY)) return 1.0f;
+    float m = 0.6f - spySkill(s_off[OFF_SPY]) / 250.0f;
+    return m < 0.2f ? 0.2f : m;
+}
+float wbCourtRepMult()
+{
+    if (!officerOk(OFF_ENVOY)) return 1.0f;
+    return 1.25f + envoySkill(s_off[OFF_ENVOY]) / 400.0f;
+}
+
+static void appointChar(int office, Character* c)
+{
+    if (office < 0 || office >= OFF_COUNT) return;
+    if (!c || !wbIsOwned(c) || c->isDead()) { wbToast("Choose one of your people to appoint."); return; }
     for (int o = 0; o < OFF_COUNT; ++o) if (s_off[o] == c) s_off[o] = NULL;   // one office each
     s_off[office] = c;
     // leave the field squad for the court squad, and stay where they are
@@ -123,6 +155,18 @@ static void appoint(int office)
     }
     if (c->canTakePlayerOrdersAtThisTime()) c->addOrder(NULL, HOLD_POSITION, NULL, false, true, c->getPosition());
     wbNews((std::string(c->getName()) + " is appointed " + OFFICE_NAME[office] + ".").c_str());
+}
+static void appoint(int office)
+{
+    Character* c = ou->player->selectedCharacter.getCharacter();
+    if (!c || !c->isPlayerCharacter()) { wbToast("Select one of your people first, then press the office's button."); return; }
+    appointChar(office, c);
+}
+static void dismissOffice(int o)
+{
+    if (o < 0 || o >= OFF_COUNT || !s_off[o]) return;
+    if (wbIsOwned(s_off[o])) wbNews((std::string(s_off[o]->getName()) + " is relieved as " + OFFICE_NAME[o] + ".").c_str());
+    s_off[o] = NULL;
 }
 static void dismiss()
 {
@@ -195,14 +239,17 @@ static void generalRecruits()
     std::string who = best->getName();
     if (!wbJoinBand(best)) return;
     wbFollowerJoined(best, from, false);
+    wbWarbandAdd(best);                                          // the General's recruits are soldiers
     wbNews(("General " + std::string(gen->getName()) + " has recruited " + who + " into the army.").c_str());
 }
 
 // The General drills the soldiers who stay near them (not officers, not fighting).
-static void generalDrills()
+static void drillsBy(int office);
+static void generalDrills() { drillsBy(OFF_GENERAL); drillsBy(OFF_DRILL); }
+static void drillsBy(int office)
 {
-    if (!officerOk(OFF_GENERAL) || g_wb.drillXp <= 0.0f) return;
-    Character* gen = s_off[OFF_GENERAL];
+    if (!officerOk(office) || g_wb.drillXp <= 0.0f) return;
+    Character* gen = s_off[office];
     float mult = 0.5f + generalSkill(gen) / 60.0f;                 // a master drills better
     Ogre::Vector3 gp = gen->getPosition();
     int n = 0;
@@ -216,7 +263,7 @@ static void generalDrills()
         wbTrainingGiveXp(c, g_wb.drillXp * mult);
         ++n;
     }
-    if (n > 0) { char b[120]; sprintf_s(b, sizeof(b), "General %s drills %d soldiers.", gen->getName().c_str(), n); wbToast(b); }
+    if (n > 0) { char b[120]; sprintf_s(b, sizeof(b), "%s %s drills %d soldiers.", OFFICE_NAME[office], gen->getName().c_str(), n); wbToast(b); }
 }
 
 // ------------------------------------------------------------ the council (every 10 minutes)
@@ -292,6 +339,68 @@ static void council()
     }
 }
 
+// ------------------------------------------------------------ the General's campaign
+// Order a campaign on a town: the General PREPARES (recruits faster, drills
+// the army) until the army reaches the size you set or CampaignPrepMin has
+// passed, then MARCHES on that town with the soldiers and attacks. When the
+// fight is over the campaign ends and the army comes home under its General.
+enum { CAMP_NONE = 0, CAMP_PREPARING, CAMP_MARCHING };
+static int         s_camp = CAMP_NONE;
+static std::string s_campTarget;
+static double      s_campSince = 0.0;
+
+static std::vector<Character*> soldiersNow()
+{
+    std::vector<Character*> out;
+    const lektor<Character*>& mine = ou->player->getAllPlayerCharacters();
+    for (uint32_t i = 0; i < mine.size(); ++i)
+    {
+        Character* c = mine[i];
+        if (c && !wbIsOfficer(c) && !c->isDead() && wbWarbandMember(c)) out.push_back(c);
+    }
+    return out;
+}
+void wbCourtCampaign(const std::string& townName)
+{
+    if (!officerOk(OFF_GENERAL)) { wbToast("Appoint a General first."); return; }
+    if (townName.empty()) { wbToast("Choose a target first."); return; }
+    if (s_camp != CAMP_NONE) { wbToast("The General is already on a campaign."); return; }
+    s_camp = CAMP_PREPARING; s_campTarget = townName; s_campSince = wbWorldMinutes();
+    wbNews(("General " + std::string(s_off[OFF_GENERAL]->getName()) + " prepares the army for a campaign against " + townName + ".").c_str());
+}
+static void campaignStep(double now)
+{
+    if (s_camp == CAMP_NONE) return;
+    if (!officerOk(OFF_GENERAL)) { s_camp = CAMP_NONE; wbNews("Without a General, the campaign is called off."); return; }
+    Character* gen = s_off[OFF_GENERAL];
+    if (s_camp == CAMP_PREPARING)
+    {
+        std::vector<Character*> soldiers = soldiersNow();
+        bool ready = (int)soldiers.size() >= s_armySize;
+        bool late  = now - s_campSince >= g_wb.campaignPrepMin;
+        if (!ready && !late) return;
+        if (soldiers.empty()) { s_camp = CAMP_NONE; wbNews("The General found no soldiers. The campaign is called off."); return; }
+        std::vector<Character*> army;
+        army.push_back(gen);
+        for (size_t i = 0; i < soldiers.size() && (int)army.size() <= s_armySize; ++i) army.push_back(soldiers[i]);
+        wbWarbandSet(army);
+        wbWarbandMarchOn(gen, s_campTarget);
+        if (!wbWarbandBusy()) { s_camp = CAMP_NONE; return; }   // the target is gone
+        s_camp = CAMP_MARCHING;
+        return;
+    }
+    if (s_camp == CAMP_MARCHING && !wbWarbandBusy())
+    {
+        s_camp = CAMP_NONE;
+        wbNews(("The campaign against " + s_campTarget + " is over. The army returns under General " + gen->getName() + ".").c_str());
+        std::vector<Character*> keep = soldiersNow();                // keep the soldiers in the army roster
+        wbWarbandSet(keep);
+        for (size_t i = 0; i < keep.size(); ++i)
+            if (keep[i]->canTakePlayerOrdersAtThisTime())
+                keep[i]->addOrder(NULL, FOLLOW_PLAYER_ORDER, (RootObject*)gen, false, true, gen->getPosition());
+    }
+}
+
 // ------------------------------------------------------------ frame
 void wbCourtAction(int action)
 {
@@ -332,19 +441,114 @@ void wbCourtFrame()
             s_off[o] = NULL;
         }
     double now = wbWorldMinutes();
-    if (now >= s_nextRecruit) { s_nextRecruit = now + 3.0; generalRecruits(); generalDrills(); }
+    if (now >= s_nextRecruit)
+    {
+        s_nextRecruit = now + (s_camp == CAMP_PREPARING ? 1.5 : 3.0);   // preparing: recruit harder
+        generalRecruits(); generalDrills();
+    }
+    campaignStep(now);
     if (now >= s_nextCouncil) { s_nextCouncil = now + 10.0; council(); }
 }
 
+// ------------------------------------------------------------ the Court Hall window (CourtUi.cpp)
+void wbCourtView(WbCourtViewData& v)
+{
+    v.slots.clear(); v.cands.clear();
+    Faction* pf = wbPlayerFaction();
+    Character* lead = NULL;
+    if (ou && ou->player) lead = ou->player->getAnyPlayerCharacter();
+    v.leader = lead ? lead->getName() : std::string("You");
+    v.leaderLine = wbRealmRankName();
+    char b[200];
+    sprintf_s(b, sizeof(b), "%d cats", wbPlayerMoney()); v.money = b;
+    sprintf_s(b, sizeof(b), "Food %d  (people %d)", (int)s_food, peopleCount()); v.food = b;
+    sprintf_s(b, sizeof(b), "Tax bonus +%d%%   Towns %d", (int)((wbCourtTaxMult() - 1.0f) * 100.0f + 0.5f), wbTownCount(pf)); v.tax = b;
+    sprintf_s(b, sizeof(b), "Army size: %d", s_armySize); v.army = b;
+    {
+        int soldiers = 0, civilians = 0, officers = 0;
+        const lektor<Character*>* all = (ou && ou->player) ? &ou->player->getAllPlayerCharacters() : NULL;
+        for (uint32_t i = 0; all && i < all->size(); ++i)
+        {
+            Character* c = (*all)[i];
+            if (!c || c->isDead()) continue;
+            if (wbIsOfficer(c)) ++officers; else if (wbWarbandMember(c)) ++soldiers; else ++civilians;
+        }
+        sprintf_s(b, sizeof(b), "Soldiers %d   -   Civilians %d   -   Officers %d", soldiers, civilians, officers);
+        v.people = b;
+    }
+    if (s_camp == CAMP_PREPARING)
+    {
+        sprintf_s(b, sizeof(b), "Campaign: preparing to attack %s (soldiers %d / %d)", s_campTarget.c_str(),
+                  (int)soldiersNow().size(), s_armySize);
+        v.campaign = b;
+    }
+    else if (s_camp == CAMP_MARCHING) v.campaign = "Campaign: the army is attacking " + s_campTarget;
+    else v.campaign = officerOk(OFF_GENERAL) ? "Campaign: none - choose a target and press Order campaign" : "Campaign: appoint a General to lead the army";
+    {
+        // enemy towns, nearest to the General (or to you) first
+        Ogre::Vector3 from = officerOk(OFF_GENERAL) ? s_off[OFF_GENERAL]->getPosition()
+                           : (ou && ou->player && ou->player->getAnyPlayerCharacter() ? ou->player->getAnyPlayerCharacter()->getPosition() : Ogre::Vector3(0, 0, 0));
+        struct T { float d2; std::string n; };
+        std::vector<T> ts;
+        const lektor<Faction*>* fs = (ou && ou->factionMgr) ? ou->factionMgr->getAllFactions() : NULL;
+        for (uint32_t i = 0; fs && pf && i < fs->size(); ++i)
+        {
+            Faction* f = (*fs)[i];
+            if (!f || f == pf || !f->warMgr || !f->relations || !f->relations->isEnemy(pf)) continue;
+            lektor<TownBase*>& towns = f->warMgr->myTowns;
+            for (uint32_t k = 0; k < towns.size(); ++k)
+            {
+                if (!towns[k]) continue;
+                Ogre::Vector3 p = towns[k]->getPosition();
+                T t; t.d2 = (p.x - from.x) * (p.x - from.x) + (p.z - from.z) * (p.z - from.z); t.n = wbTownName(towns[k]);
+                ts.push_back(t);
+            }
+        }
+        for (size_t i = 0; i < ts.size(); ++i) for (size_t k = i + 1; k < ts.size(); ++k) if (ts[k].d2 < ts[i].d2) std::swap(ts[i], ts[k]);
+        for (size_t i = 0; i < ts.size() && i < 12; ++i)
+            v.targets.push_back(ts[i].n);                   // the name is the key the campaign looks up
+    }
+    v.foodFrac = s_food / 300.0f; if (v.foodFrac > 1.0f) v.foodFrac = 1.0f;
+    for (int o = 0; o < OFF_COUNT; ++o)
+    {
+        WbCourtSlotView s;
+        s.title = OFFICE_NAME[o];
+        s.filled = officerOk(o);
+        if (s.filled)
+        {
+            s.name = s_off[o]->getName();
+            sprintf_s(b, sizeof(b), "skill %d   loyalty %d", (int)officeSkill(o, s_off[o]), (int)wbFollowerLoyalty(s_off[o]));
+            s.line = b;
+            s.loyalty = wbFollowerLoyalty(s_off[o]) / 100.0f;
+        }
+        else { s.name = "+  vacant"; s.line = "pick a candidate, then click here"; s.loyalty = 0.0f; }
+        v.slots.push_back(s);
+    }
+    const lektor<Character*>* mine = (ou && ou->player) ? &ou->player->getAllPlayerCharacters() : NULL;
+    for (uint32_t i = 0; mine && i < mine->size(); ++i)
+    {
+        Character* c = (*mine)[i];
+        if (!c || wbIsOfficer(c) || c->isDead()) continue;
+        WbCandView cv; cv.who = c;
+        sprintf_s(b, sizeof(b), "%s%s  (fin %d / stw %d / war %d / spy %d)", wbWarbandMember(c) ? "[S] " : "", c->getName().c_str(), (int)financeSkill(c),
+                  (int)stewardSkill(c), (int)generalSkill(c), (int)spySkill(c));
+        cv.label = b;
+        v.cands.push_back(cv);
+    }
+}
+void wbCourtAppoint(int office, Character* c) { appointChar(office, c); }
+void wbCourtDismiss(int office) { dismissOffice(office); }
+void wbCourtArmy(int delta) { if (delta < 0) wbCourtAction(4); else if (delta > 0) wbCourtAction(5); else wbCourtAction(6); }
+
 std::string wbCourtSummary()
 {
-    std::string out = "YOUR COURT  (select one of your people, then press an office button)\n\n";
+    std::string out = "YOUR COURT  (Alt+C opens the Court Hall; or select one of your people, then press an office button)\n\n";
     char b[300];
     for (int o = 0; o < OFF_COUNT; ++o)
     {
         if (officerOk(o))
         {
-            float skill = o == OFF_FINANCE ? financeSkill(s_off[o]) : o == OFF_STEWARD ? stewardSkill(s_off[o]) : generalSkill(s_off[o]);
+            float skill = officeSkill(o, s_off[o]);
             sprintf_s(b, sizeof(b), "  %s: %s  (skill %d, loyalty %d)\n", OFFICE_NAME[o], s_off[o]->getName().c_str(),
                       (int)skill, (int)wbFollowerLoyalty(s_off[o]));
         }
@@ -395,5 +599,6 @@ void wbCourtLoad(const std::vector<std::string>& in)
 void wbCourtReset()
 {
     for (int o = 0; o < OFF_COUNT; ++o) { s_off[o] = NULL; s_offRestore[o].clear(); }
+    s_camp = CAMP_NONE; s_campTarget.clear();
     s_courtSquad = NULL; s_food = 60.0f; s_armySize = 4; s_nextCouncil = 10.0; s_nextRecruit = 5.0; s_dev.clear();
 }

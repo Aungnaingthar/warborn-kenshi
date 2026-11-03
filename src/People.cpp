@@ -92,6 +92,7 @@ void wbGiveRep(Faction* f, float amount, const char* why)
 {
     Faction* pf = wbPlayerFaction();
     if (!f || !pf || f == pf || !f->relations || amount == 0.0f) return;
+    if (amount > 0.0f) amount *= wbCourtRepMult();       // your Envoy speaks for you
     float before = f->relations->getFactionRelation(pf);
     f->relations->affectRelations(pf, amount, 1.0f);
     float after = f->relations->getFactionRelation(pf);
