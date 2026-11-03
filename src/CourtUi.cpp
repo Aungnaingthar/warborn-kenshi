@@ -225,7 +225,7 @@ static void build()
         const int rowY[2] = { (int)(H * 0.24f), (int)(H * 0.55f) };
         const int gap = (leftW - 3 * cw) / 4;
         const int midX = leftW / 2;
-        rect(cl, midX - 1, by + bh, 3, rowY[0] - (by + bh) - 14, line);                 // banner down
+        rect(cl, midX - 1, by + bh + 26, 3, rowY[0] - (by + bh + 26) - 14, line);       // banner down (below the counts line)
         for (int r = 0; r < 2; ++r)
         {
             int left = gap + cw / 2, right = gap + 2 * (cw + gap) + cw / 2;
