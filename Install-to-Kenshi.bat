@@ -33,6 +33,8 @@ if exist "!DEST!\WASDCombatPlugin.ini" del /Q "!DEST!\WASDCombatPlugin.ini"
 
 echo [OK] Warborn installed to:
 echo      !DEST!
+for %%F in ("!DLL!") do echo [OK] Warborn.dll built: %%~tF
+echo      ^(this date and time must be from your LAST build^)
 echo.
 echo Next: start Kenshi with RE_Kenshi, open Mods, tick "Warborn".
 goto :end

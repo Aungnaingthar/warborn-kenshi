@@ -401,7 +401,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 
 __declspec(dllexport) void startPlugin()
 {
-    DebugLog("Warborn: World v0.1 - living world, wars, reputation, contracts, recruiting");
+    DebugLog("Warborn: World build 2026-11-03b (training hook fix) - living world, wars, court");
     srand((unsigned)GetTickCount());
     InitializeCriticalSection(&s_felledLock);
     memset(s_keyPrev, 0, sizeof(s_keyPrev));
