@@ -488,10 +488,12 @@ std::string wbTrainingSummary()
     return out;
 }
 
+// updateLastTask is virtual: &Character::updateLastTask would be a thunk inside
+// Warborn.dll (KenshiLib asserts), so hook the non-virtual _NV_ alias instead.
 void wbTrainingInit()
 {
     if (!s_lockReady) { InitializeCriticalSection(&s_lock); s_lockReady = true; }
-    if (KenshiLib::SUCCESS != KenshiLib::AddHook(KenshiLib::GetRealAddress(&Character::updateLastTask),
+    if (KenshiLib::SUCCESS != KenshiLib::AddHook(KenshiLib::GetRealAddress(&Character::_NV_updateLastTask),
                                                  (void*)&lastTask_hook, &s_lastTaskOrig))
         ErrorLog("Warborn: updateLastTask hook FAILED - dummy partner training off");
     else
