@@ -21,7 +21,7 @@ Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 | **Reputation** | Felling a faction's enemies earns their respect ("the enemy of my enemy"). Fighting at a besieged town helps decide the battle and earns gratitude from the side you helped. |
 | **Contracts** | Hunts, defending towns and joining assaults, offered by factions that know you. Rewards in reputation. |
 | **Recruiting** | Point at anyone and press **Alt+R**. Your standing with their faction decides whether they join. |
-| **Commands** | **F5** follow me, **F6** hold position, **F7** charge, **F8** focus the nearest enemy. |
+| **Commands** | **Alt+1** follow me, **Alt+2** hold position, **Alt+3** charge, **Alt+4** focus the nearest enemy. |
 | **Realistic combat** | A speed cap for everyone, with skill turned into precision (skill gap and armour exposure scale damage). |
 | **Fair battles** | No more 10-on-1 dogpiles: at most 2 attackers per target, and the rest spread out over the enemy line. |
 | **Diplomacy** | Factions worn out by war agree truces; when one power grows too big, its enemies form a coalition against it. |
@@ -64,7 +64,7 @@ Every Warborn key uses **Alt**, so nothing clashes with Kenshi's own hotkeys (th
 | `Shift+Alt+T` | Tournament among your nearby fighters |
 | `Alt+Y` | Mark a **training yard** where your selected person stands: your people inside it spar in pairs on their own (again to remove it) |
 | `Alt+M` | Marry the selected person to the nearest unmarried one of your people |
-| `F5` / `F6` / `F7` / `F8` | Your people near your selected character: follow / hold / charge / focus |
+| `Alt+1` / `Alt+2` / `Alt+3` / `Alt+4` | Your people near your selected character: follow / hold / charge / focus |
 
 Every key and number is in `Warborn.ini`.
 

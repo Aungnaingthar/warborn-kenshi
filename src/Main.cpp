@@ -158,10 +158,10 @@ void wbLoadConfig(const char* path)
     g_wb.repWarHelp        = iniF(path, "RepWarHelp",        12.0f);
     g_wb.recruitKey        = iniKey(path, "RecruitKey",      "ALT+R");
     g_wb.recruitBase       = iniF(path, "RecruitBase",       0.25f);
-    g_wb.cmdKeys[0]        = iniKey(path, "CmdFollowKey",    "F5");
-    g_wb.cmdKeys[1]        = iniKey(path, "CmdHoldKey",      "F6");
-    g_wb.cmdKeys[2]        = iniKey(path, "CmdChargeKey",    "F7");
-    g_wb.cmdKeys[3]        = iniKey(path, "CmdFocusKey",     "F8");
+    g_wb.cmdKeys[0]        = iniKey(path, "CmdFollowKey",    "ALT+1");
+    g_wb.cmdKeys[1]        = iniKey(path, "CmdHoldKey",      "ALT+2");
+    g_wb.cmdKeys[2]        = iniKey(path, "CmdChargeKey",    "ALT+3");
+    g_wb.cmdKeys[3]        = iniKey(path, "CmdFocusKey",     "ALT+4");
     g_wb.cmdRange          = iniF(path, "CommandRange",      150.0f);
     g_wb.journalKey        = iniKey(path, "JournalKey",      "ALT+J");
     g_wb.courtKey          = iniKey(path, "CourtKey",        "ALT+C");
