@@ -69,6 +69,8 @@ static volatile bool s_journalOpen = false;     // UI -> main
 static volatile int  s_tab         = 0;         // UI -> main
 static volatile int  s_acceptReq   = -1;        // UI -> main (button index)
 static volatile int  s_originReq   = -1;        // UI -> main (origin button)
+static volatile int  s_courtReq    = -1;        // UI -> main (court button)
+static bool        s_bodyCourtOpen = false;     // locked: show the court buttons
 static bool        s_bodyOriginOpen = false;    // locked: show the origin buttons
 static volatile bool s_rebuildNow  = true;      // UI -> main
 static volatile bool s_hideReq     = false;     // main -> UI
@@ -108,14 +110,17 @@ static MyGUI::TextBox* s_toast      = NULL;
 static bool            s_toastTried = false;
 static MyGUI::Window*  s_win        = NULL;
 static MyGUI::TextBox* s_body       = NULL;
-static const int      TAB_COUNT    = 6;
+static const int      TAB_COUNT    = 7;
 static const int      TAB_MAP      = 4;
 static const int      TAB_PEOPLE   = 5;
-static MyGUI::Button*  s_tabs[TAB_COUNT] = { NULL, NULL, NULL, NULL, NULL, NULL };
+static const int      TAB_COURT    = 6;
+static MyGUI::Button*  s_tabs[TAB_COUNT] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL };
+static MyGUI::Button*  s_courtBtn[7] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL };
+static const char* const COURT_BTN[7] = { "Finance", "Steward", "General", "Dismiss", "Army -", "Army +", "March!" };
 static MyGUI::Button*  s_originBtn[5] = { NULL, NULL, NULL, NULL, NULL };
 static MyGUI::Button*  s_accept[4]  = { NULL, NULL, NULL, NULL };
 static bool            s_winTried   = false;
-static const char* const TAB_NAME[TAB_COUNT] = { "News", "Wars", "Contracts", "Reputation", "Map", "People" };
+static const char* const TAB_NAME[TAB_COUNT] = { "News", "Wars", "Contracts", "Reputation", "Map", "People", "Court" };
 // territory map widgets (created on first use)
 static const int       MAX_DOTS     = 160;
 static MyGUI::Widget*  s_mapPanel   = NULL;
@@ -159,6 +164,10 @@ static void onOrigin(MyGUI::Widget* sender)
 {
     for (int i = 0; i < 5; ++i) if (sender == s_originBtn[i]) { s_originReq = i; s_rebuildNow = true; }
 }
+static void onCourt(MyGUI::Widget* sender)
+{
+    for (int i = 0; i < 7; ++i) if (sender == s_courtBtn[i]) { s_courtReq = i; s_rebuildNow = true; }
+}
 static void onClose(MyGUI::Widget*) { if (s_win) s_win->setVisible(false); s_journalOpen = false; }
 
 static void ensureWindow()
@@ -176,7 +185,7 @@ static void ensureWindow()
         MyGUI::Widget* client = s_win->getClientWidget();
         for (int i = 0; i < TAB_COUNT; ++i)
         {
-            s_tabs[i] = client->createWidgetReal<MyGUI::Button>("Kenshi_Button1", 0.02f + 0.135f * (float)i, 0.01f, 0.13f, 0.07f,
+            s_tabs[i] = client->createWidgetReal<MyGUI::Button>("Kenshi_Button1", 0.02f + 0.117f * (float)i, 0.01f, 0.112f, 0.07f,
                                                                 MyGUI::Align::Default, "");
             s_tabs[i]->setCaption(TAB_NAME[i]);
             s_tabs[i]->eventMouseButtonClick += MyGUI::newDelegate(onTab);
@@ -205,6 +214,14 @@ static void ensureWindow()
             s_originBtn[i]->setCaption(wbOriginName(i));
             s_originBtn[i]->eventMouseButtonClick += MyGUI::newDelegate(onOrigin);
             s_originBtn[i]->setVisible(false);
+        }
+        for (int i = 0; i < 7; ++i)
+        {
+            s_courtBtn[i] = client->createWidgetReal<MyGUI::Button>("Kenshi_Button1", 0.02f + 0.137f * (float)i, 0.89f, 0.13f, 0.08f,
+                                                                    MyGUI::Align::Default, "");
+            s_courtBtn[i]->setCaption(COURT_BTN[i]);
+            s_courtBtn[i]->eventMouseButtonClick += MyGUI::newDelegate(onCourt);
+            s_courtBtn[i]->setVisible(false);
         }
         // territory map: a dark panel on the left, the legend on the right
         s_mapPanel = client->createWidgetReal<MyGUI::Widget>("WhiteSkin", 0.02f, 0.11f, 0.60f, 0.86f, MyGUI::Align::Default, "");
@@ -241,6 +258,7 @@ static void buildBody()
                   + "\nTHE POWERS OF THE LAND (towns held)\n" + wbPowerRanking(); break;
         case 2: t = wbContractsSummary(); break;
         case TAB_PEOPLE: t = wbFollowersSummary() + "\n" + wbOriginSummary(); break;
+        case TAB_COURT: t = wbCourtSummary(); break;
         default: t = "YOUR STANDING (how each faction sees you)\n" + wbReputationSummary()
                    + "\nEarn respect by felling a faction's enemies, fighting in their wars and finishing their contracts.\n"
                    + "Good standing makes their people willing to join you (point at one, press Alt+R)."; break;
@@ -250,8 +268,9 @@ static void buildBody()
     std::vector<WbMapDot> dots; std::string legend;
     if (s_tab == TAB_MAP) wbWorldMap(dots, legend);
     bool originOpen = (s_tab == TAB_PEOPLE) && !wbOriginChosen();
+    bool courtOpen = (s_tab == TAB_COURT);
     WbGuard g;
-    s_bodyText = wrapped; s_bodyOffers = offers; s_bodyDirty = true; s_bodyOriginOpen = originOpen;
+    s_bodyText = wrapped; s_bodyOffers = offers; s_bodyDirty = true; s_bodyOriginOpen = originOpen; s_bodyCourtOpen = courtOpen;
     if (s_tab == TAB_MAP) { s_mapDots.swap(dots); s_mapLegend = legend; s_mapDirty = true; }
 }
 
@@ -317,6 +336,8 @@ static void applyBody()
         WbGuard g;
         if (s_bodyDirty) { t = s_bodyText; offers = s_bodyOffers; dirty = true; s_bodyDirty = false; }
         originOpen = s_bodyOriginOpen;
+        bool co = s_bodyCourtOpen;
+        for (int i = 0; i < 7; ++i) if (s_courtBtn[i] && s_courtBtn[i]->getVisible() != co) s_courtBtn[i]->setVisible(co);
     }
     for (int i = 0; i < 5; ++i) if (s_originBtn[i] && s_originBtn[i]->getVisible() != originOpen) s_originBtn[i]->setVisible(originOpen);
     if (s_tab == TAB_MAP) applyMap();
@@ -337,6 +358,8 @@ void wbUiMainFrame()
     if (a >= 0) { s_acceptReq = -1; wbContractsAccept(a); s_rebuildNow = true; }
     int o = s_originReq;
     if (o >= 0) { s_originReq = -1; wbFollowersChooseOrigin(o); s_rebuildNow = true; }
+    int c = s_courtReq;
+    if (c >= 0) { s_courtReq = -1; wbCourtAction(c); s_rebuildNow = true; }
     if (!s_journalOpen) return;
     ULONGLONG now = GetTickCount64();
     if (s_rebuildNow || now >= s_nextBuild)

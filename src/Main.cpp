@@ -150,6 +150,8 @@ void wbLoadConfig(const char* path)
     g_wb.resolveMin        = iniF(path, "ResolveMin",        8.0f);
     g_wb.conquest          = iniB(path, "Conquest",          true);
     g_wb.conquestBase      = iniF(path, "ConquestBase",      0.35f);
+    g_wb.warCost           = iniF(path, "WarCost",           800.0f);
+    g_wb.townIncome        = iniF(path, "TownIncome",        150.0f);
     g_wb.attackPlayerTowns = iniB(path, "AttackPlayerTowns", false);
     g_wb.repPerFelled      = iniF(path, "RepPerFelled",      0.6f);
     g_wb.repCapPerFaction  = iniF(path, "RepCapPerFaction",  8.0f);
@@ -169,6 +171,9 @@ void wbLoadConfig(const char* path)
     g_wb.playerConquest    = iniB(path, "PlayerConquest",    true);
     g_wb.townTax           = (int)iniF(path, "TownTax",      250.0f);
     g_wb.mapOverlay        = iniB(path, "MapOverlay",        true);
+    g_wb.courtSquad        = iniB(path, "CourtSquad",        true);
+    g_wb.courtMaxPeople    = (int)iniF(path, "CourtMaxPeople", 60.0f);
+    g_wb.drillXp           = iniF(path, "DrillXp",           1.0f);
     g_wb.trainKey          = iniKey(path, "TrainKey",        "ALT+T");
     g_wb.talkKey           = iniKey(path, "TalkKey",         "ALT+H");
     g_wb.marryKey          = iniKey(path, "MarryKey",        "ALT+M");
@@ -276,6 +281,7 @@ static void resetAll(const char* why)
     wbWarbandReset();
     wbTrainingReset();
     wbFollowersReset();
+    wbCourtReset();
     wbUiReset();
     s_worldMinutes = 0.0;
     char b[96]; sprintf_s(b, sizeof(b), "[Warborn] reset (%s)", why); DebugLog(b);
@@ -314,6 +320,7 @@ static void mainLoop_hook(GameWorld* thisptr, float time)
     wbWarbandFrame();
     wbTrainingFrame();
     wbFollowersFrame();
+    wbCourtFrame();
     wbUiMainFrame();
 }
 

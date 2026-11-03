@@ -110,6 +110,7 @@
     <ClCompile Include="src\Money.cpp" />
     <ClCompile Include="src\Pick.cpp" />
     <ClCompile Include="src\MapOverlay.cpp" />
+    <ClCompile Include="src\Court.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Warborn.h" />

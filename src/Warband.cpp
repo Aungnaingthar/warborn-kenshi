@@ -161,9 +161,20 @@ static int orderFight(float range)
     return n;
 }
 
-static void startTake()
+static void startTakeFrom(Character* lead);
+static void startTake() { startTakeFrom(selectedOwn()); }
+
+// The court's General: make these people the warband and march with them.
+void wbWarbandSet(const std::vector<Character*>& members)
 {
-    Character* lead = selectedOwn();
+    s_band.clear();
+    for (size_t i = 0; i < members.size(); ++i) if (members[i]) s_band.push_back(members[i]);
+}
+void wbWarbandMarch(Character* general) { startTakeFrom(general); }
+bool wbWarbandBusy() { return s_mission != MISSION_NONE; }
+
+static void startTakeFrom(Character* lead)
+{
     if (s_band.empty()) { wbToast("Your warband is empty. Select people and press Alt+B to add them."); return; }
     Ogre::Vector3 from = lead ? lead->getPosition() : s_band[0]->getPosition();
     Faction* owner = NULL;

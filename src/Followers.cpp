@@ -130,6 +130,21 @@ static const char* loyaltyWord(float l)
     return l >= 80 ? "devoted" : l >= 55 ? "loyal" : l >= 40 ? "uncertain" : l >= 20 ? "restless" : "plotting";
 }
 
+float wbFollowerLoyalty(Character* c)
+{
+    Follower* f = find(c);
+    return f ? loyalty(*f) : 50.0f;
+}
+void wbFollowersAllBond(float delta)
+{
+    for (size_t i = 0; i < s_fol.size(); ++i)
+    {
+        s_fol[i].bond += delta;
+        if (s_fol[i].bond < 0.0f) s_fol[i].bond = 0.0f;
+        if (s_fol[i].bond > 100.0f) s_fol[i].bond = 100.0f;
+    }
+}
+
 // ------------------------------------------------------------ joining
 void wbFollowerJoined(Character* c, Faction* origin, bool prisoner)
 {

@@ -65,6 +65,7 @@ static void writeState(const std::string& save)
     wbWarbandSave(lines);
     wbFollowersSave(lines);
     wbTrainingSave(lines);
+    wbCourtSave(lines);
     wbUiSave(lines);
     std::string path = fileFor(save);
     FILE* f = NULL;
@@ -99,6 +100,7 @@ void wbPersistLoad()
     wbWarbandLoad(lines);
     wbFollowersLoad(lines);
     wbTrainingLoad(lines);
+    wbCourtLoad(lines);
     wbUiLoad(lines);
     char b[MAX_PATH + 64]; sprintf_s(b, sizeof(b), "[Warborn] world restored (%d records) from %s", (int)lines.size(), path.c_str());
     wbLogAlways(b);

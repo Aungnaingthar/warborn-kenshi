@@ -42,6 +42,7 @@ struct FacMind
     Faction*  grudge;         // who took a town from us
     TownBase* lostTown;       // compare only - never dereference unless townStillExists()
     std::string lostTownName;
+    float     treasury;       // the faction's economy: grows with its towns, pays for wars
     double    grudgeUntil;
 };
 static std::vector<FacMind> s_minds;
@@ -70,6 +71,7 @@ static void refreshMinds()
         FacMind m;
         m.f = f; m.aggression = personality(wbFactionName(f));
         m.grudge = NULL; m.lostTown = NULL; m.grudgeUntil = 0.0; m.lostTownName = "";
+        m.treasury = 500.0f + 300.0f * (float)wbTownCount(f);
         s_minds.push_back(m);
     }
 }
@@ -209,6 +211,10 @@ static FacMind* pickAggressor(double now)
         if (towns <= 2) wt *= 1.5f;                              // a small clan with big dreams
         if (m.grudge && now < m.grudgeUntil) wt *= 2.5f;          // revenge burns
         if (coalitionEnemy(m.f)) wt *= 1.5f;                      // the coalition is on the march
+        bool revenge = m.grudge && now < m.grudgeUntil;
+        if (m.treasury < g_wb.warCost && !revenge) continue;      // can't pay for a war (revenge finds a way)
+        float rich = m.treasury > 6000.0f ? 6000.0f : m.treasury;
+        wt *= 0.5f + rich / 4000.0f;                              // a full treasury raises armies
         w[i] = wt; total += wt;
     }
     if (total <= 0.0f) return NULL;
@@ -308,6 +314,8 @@ static void launch(WarPlan& p, double now)
     if (!inst) { p.stage = -1; return; }
     p.stage = STAGE_MARCHING; p.stageAt = now;
     countWar(p.ev.attacker, p.ev.defender);
+    FacMind* payer = mindOf(p.ev.attacker);
+    if (payer) { payer->treasury -= g_wb.warCost; if (payer->treasury < 0.0f) payer->treasury = 0.0f; }
     WbVars v; v.A = p.ev.attackerName; v.D = p.ev.defenderName; v.T = p.ev.townName; v.H = p.homeName;
     wbNews(wbLine(LINE_WAR_START, v).c_str());
     if (isVassal(p.ev.defender))
@@ -343,6 +351,15 @@ static void resolve(WarPlan& p, double now)
     float chance = g_wb.conquestBase * (float)(atkTowns + 2) / (float)(defTowns + 2);
     chance += 0.06f * (float)e.playerHelpedAttacker - 0.06f * (float)e.playerHelpedDefender;
     if (defTowns <= 1) chance *= 0.6f;                         // a last stand is fierce
+    {
+        FacMind* am = mindOf(e.attacker); FacMind* dm = mindOf(e.defender);
+        if (am && dm)                                              // the richer side fields the better army
+        {
+            float r = (am->treasury + 1000.0f) / (dm->treasury + 1000.0f);
+            if (r < 0.7f) r = 0.7f; if (r > 1.4f) r = 1.4f;
+            chance *= r;
+        }
+    }
     if (chance < 0.05f) chance = 0.05f;
     if (chance > 0.85f) chance = 0.85f;
     bool taken = g_wb.conquest && exists && owner == e.defender && wbRand01() < chance;
@@ -359,6 +376,8 @@ static void resolve(WarPlan& p, double now)
         e.conquered = true;
         wbNews(wbLine(LINE_TOWN_FELL, v).c_str());
         FacMind* loser = mindOf(e.defender);
+        FacMind* winner = mindOf(e.attacker);
+        if (loser && winner) { float loot = loser->treasury * 0.3f; loser->treasury -= loot; winner->treasury += loot; }
         if (loser) { loser->grudge = e.attacker; loser->lostTown = e.town; loser->lostTownName = e.townName; loser->grudgeUntil = now + 90.0; }
         if (e.attacker->relations) e.attacker->relations->affectRelations(e.defender, -15.0f, 1.0f);
         if (e.defender->relations) e.defender->relations->affectRelations(e.attacker, -25.0f, 1.0f);
@@ -386,8 +405,19 @@ static void resolve(WarPlan& p, double now)
     wbContractsOnWarEnded(e);
 }
 
+static void economy()
+{
+    for (size_t i = 0; i < s_minds.size(); ++i)                    // towns pay their owners
+    {
+        FacMind& m = s_minds[i];
+        m.treasury += g_wb.townIncome * (float)wbTownCount(m.f);
+        if (m.treasury > 20000.0f) m.treasury = 20000.0f;
+    }
+}
+
 static void diplomacy(double now)
 {
+    economy();
     // expire pacts (with news)
     for (size_t i = 0; i < s_pacts.size(); )
     {
@@ -510,7 +540,7 @@ static void realm(double now)
     int myTowns = wbTownCount(pf);
     if (myTowns > 0 && g_wb.townTax > 0)
     {
-        int tax = (int)((float)(g_wb.townTax * myTowns) * (1.0f + 0.25f * (float)s_rank));
+        int tax = (int)((float)(g_wb.townTax * myTowns) * (1.0f + 0.25f * (float)s_rank) * wbCourtTaxMult());
         wbPayPlayer(tax);
         char b[160];
         sprintf_s(b, sizeof(b), "Tax collectors return from your %d town%s: %d cats.", myTowns, myTowns == 1 ? "" : "s", tax);
@@ -809,7 +839,7 @@ void wbWorldLoad(const std::vector<std::string>& in)
     }
 }
 
-struct PowerRow { int towns; std::string name; };
+struct PowerRow { int towns; std::string name; int treasury; };
 static bool powerLess(const PowerRow& a, const PowerRow& b) { return a.towns > b.towns; }
 std::string wbPowerRanking()
 {
@@ -820,7 +850,7 @@ std::string wbPowerRanking()
         if (!f || wbIsPlayerFaction(f)) continue;
         int n = wbTownCount(f);
         if (n <= 0) continue;
-        PowerRow r; r.towns = n; r.name = wbFactionName(f);
+        PowerRow r; r.towns = n; r.name = wbFactionName(f); r.treasury = (int)s_minds[i].treasury;
         rows.push_back(r);
     }
     std::sort(rows.begin(), rows.end(), powerLess);
@@ -828,7 +858,7 @@ std::string wbPowerRanking()
     char b[160];
     for (size_t i = 0; i < rows.size() && i < 8; ++i)
     {
-        sprintf_s(b, sizeof(b), "  %d. %s - %d towns\n", (int)i + 1, rows[i].name.c_str(), rows[i].towns);
+        sprintf_s(b, sizeof(b), "  %d. %s - %d towns, treasury ~%d\n", (int)i + 1, rows[i].name.c_str(), rows[i].towns, rows[i].treasury);
         out += b;
     }
     if (out.empty()) out = "  (no information yet)\n";

@@ -131,6 +131,8 @@ static void giveXp(Character* c, float amount)
     }
 }
 
+void wbTrainingGiveXp(Character* c, float amount) { giveXp(c, amount); }
+
 static void orderFight(Bout& t)
 {
     if (t.a->canTakePlayerOrdersAtThisTime()) t.a->addOrder(NULL, MELEE_ATTACK, (RootObject*)t.b, false, true, t.b->getPosition());

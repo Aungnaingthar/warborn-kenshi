@@ -33,6 +33,8 @@ struct WbConfig
     float resolveMin;           // march -> outcome
     bool  conquest;             // towns can change owner
     float conquestBase;         // base chance an assault takes the town
+    float warCost;              // treasury a faction spends to launch a war
+    float townIncome;           // treasury each town earns its faction every 5 min
     bool  attackPlayerTowns;
     // reputation
     float repPerFelled;
@@ -70,6 +72,9 @@ struct WbConfig
     float smithingXpMult;       // easier smithing
     float learnMult;            // all skills
     bool  mapOverlay;           // colour Kenshi's own map by owner
+    bool  courtSquad;           // officers move to their own Court squad
+    int   courtMaxPeople;       // the General stops recruiting at this many people
+    float drillXp;              // the General drills soldiers near them (per ~3 min)
     // ui
     int   journalKey;
 };
@@ -188,6 +193,7 @@ void wbTrainingInit();
 void wbTrainingFrame();
 void wbTrainingReset();
 std::string wbTrainingSummary();
+void wbTrainingGiveXp(Character* c, float amount);   // weapon, attack, defence, dodge, toughness
 void wbTrainingSave(std::vector<std::string>& out); void wbTrainingLoad(const std::vector<std::string>& in);
 // Any thread: blunt the blows between two sparring partners.
 void wbTrainingScaleHit(Character* victim, Character* attacker, Damages& damage);
@@ -208,6 +214,20 @@ std::string wbOriginSummary();
 std::string wbFollowersSummary();
 void  wbFollowersSave(std::vector<std::string>& out); void wbFollowersLoad(const std::vector<std::string>& in);
 void  wbWarbandAdd(Character* c);
+void  wbWarbandSet(const std::vector<Character*>& members);
+void  wbWarbandMarch(Character* general);
+bool  wbWarbandBusy();
+bool  wbJoinBand(Character* c);                       // recruit directly (court General)
+float wbFollowerLoyalty(Character* c);
+void  wbFollowersAllBond(float delta);
+// ------------------------------------------------------------ court (Court.cpp)
+void  wbCourtFrame();
+void  wbCourtReset();
+void  wbCourtAction(int action);                      // from the journal buttons (main thread)
+std::string wbCourtSummary();
+float wbCourtTaxMult();                               // finance + development bonus on town taxes
+bool  wbIsOfficer(Character* c);
+void  wbCourtSave(std::vector<std::string>& out);   void wbCourtLoad(const std::vector<std::string>& in);
 std::string wbLatestNews();                           // newest news line, no time stamp
 // pay the player's purse (contracts, trade); false if they can't afford a cost
 void  wbPayPlayer(int cats);

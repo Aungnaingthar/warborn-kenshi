@@ -40,6 +40,8 @@ Full plan: [`docs/DESIGN.md`](docs/DESIGN.md)
 | **Trade** | Contracts pay cats. Caravan contracts: invest now, get your share back with profit if their towns stay safe. |
 | **Age and marriage** | Everyone ages; old fighters weaken and can die of old age. **Alt+M** marries two of your people (more loyal together; they grieve if one dies). |
 | **Easier smithing** | Smithing skills learn 3× faster (adjustable). |
+| **Your court** | Journal **Court** tab: appoint a **Finance Minister** (trade, rents, better taxes; a disloyal one embezzles), a **Steward** (develops your towns: merchants rent buildings and open shops, farms fill the food stores; empty stores make your people hungry and unhappy) and a **General** (recruits soldiers on their own, drills the soldiers near them, and leads the army: choose how many soldiers, then **March!** on the nearest enemy town). Officers move to their own Court squad. |
+| **Faction economies** | Every faction has a treasury that grows with its towns. Wars cost money: poor factions wait, rich ones raise armies and fight better, and a conquered town costs its owner 30% of the treasury. |
 | **Your nation** | Towns your warband takes are yours: they pay taxes every 10 minutes (more as your rank grows), listed in the journal. |
 | **Rank and vassals** | Your power grows with towns and fame: Wandering Band, Free Company, Lordship, Realm, Kingdom. From Lordship on, small friendly factions may swear fealty, pay tribute and call for help, and they rebel if they stop liking you. |
 

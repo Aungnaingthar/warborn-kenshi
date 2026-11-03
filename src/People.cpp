@@ -234,6 +234,14 @@ static bool joinBand(Character* c, Character* leader)
     return ok;
 }
 
+// For the court's General: recruit someone directly (no chance roll here).
+bool wbJoinBand(Character* c)
+{
+    Character* leader = firstConsciousPlayerChar();
+    if (!c || !leader) return false;
+    return joinBand(c, leader);
+}
+
 static void tryRecruit()
 {
     Character* c = wbSelectedPerson();
