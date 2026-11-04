@@ -300,6 +300,7 @@ static void mainLoop_hook(GameWorld* thisptr, float time)
     s_mainLoopOrig(thisptr, time);
 
     bool live = worldLive();
+    wbBattleFrame(live);
     if (live != s_wasLive)
     {
         s_wasLive = live;
@@ -401,7 +402,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 
 __declspec(dllexport) void startPlugin()
 {
-    DebugLog("Warborn: World build 2026-11-03b (training hook fix) - living world, wars, court");
+    DebugLog("Warborn: World build 2026-11-04a (fair-battle crash guard) - living world, wars, court");
     srand((unsigned)GetTickCount());
     InitializeCriticalSection(&s_felledLock);
     memset(s_keyPrev, 0, sizeof(s_keyPrev));

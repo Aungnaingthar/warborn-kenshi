@@ -181,6 +181,7 @@ void wbGiveRep(Faction* f, float amount, const char* why);
 class Damages;
 void wbCombatInstall(const char* iniPath);    // reads settings, installs the speed hook
 void wbBattleInstall(const char* iniPath);    // fair battles: spread attackers across enemies
+void wbBattleFrame(bool worldLive);           // main thread: refresh which characters exist
 // Any thread: scale a melee hit by skill gap and armour (everyone, NPCs too).
 void wbCombatBeforeHit(Character* victim, Character* attacker, Damages& damage);
 

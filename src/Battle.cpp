@@ -28,6 +28,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <vector>
+#include <algorithm>
 
 static bool  s_fair          = true;
 static int   s_maxPerTarget  = 2;
@@ -41,6 +43,16 @@ static int              s_engN = 0;
 static CRITICAL_SECTION s_lock;
 static volatile LONG    s_redirectLogs = 0;
 static const ULONGLONG  FRESH_MS = 1500;   // short: fighters far away can be unloaded
+
+// Engagement entries are only remembered pointers: the character may have been
+// unloaded or deleted since. Before touching one, check it is in this sorted
+// copy of the game's own character update list, refreshed on the main thread.
+static std::vector<Character*> s_live;     // guarded by s_lock
+static ULONGLONG               s_liveAt = 0;
+static bool isLive(Character* c)
+{
+    return c && std::binary_search(s_live.begin(), s_live.end(), c);
+}
 
 static bool usable(Character* c)
 {
@@ -79,11 +91,13 @@ static float dist2(Character* a, Character* b)
     return dx * dx + dz * dz;
 }
 
+static volatile bool s_ready = false;     // lock created and hook installed
+
 static Character* (*s_chooseOrig)(CombatClass*) = NULL;
 static Character* choose_hook(CombatClass* cc)
 {
     Character* t = s_chooseOrig(cc);
-    if (!s_fair || !cc || !t) return t;
+    if (!s_fair || !s_ready || !cc || !t) return t;
     Character* me = cc->me;
     if (!me || !usable(me)) return t;
     if (me->isPlayerCharacter() && !s_fairForPlayer) return t;
@@ -96,7 +110,7 @@ static Character* choose_hook(CombatClass* cc)
         // 1. keep the opponent we already had, if that fight is still fair
         Engage* mine = findEngage(me);
         Character* prev = (mine && now - mine->at < FRESH_MS) ? mine->target : NULL;
-        if (prev && prev != t && usable(prev) && me->isEnemy(prev, true)
+        if (prev && prev != t && isLive(prev) && usable(prev) && me->isEnemy(prev, true)
             && attackersOn(prev, me, now) < s_maxPerTarget && dist2(me, prev) <= s_reassignRange * s_reassignRange)
             pick = prev;
         else
@@ -107,7 +121,7 @@ static Character* choose_hook(CombatClass* cc)
             {
                 if (now - s_eng[i].at >= FRESH_MS) continue;
                 Character* c = s_eng[i].who;
-                if (!c || c == me || c == t || !usable(c) || !me->isEnemy(c, true)) continue;
+                if (!c || c == me || c == t || !isLive(c) || !usable(c) || !me->isEnemy(c, true)) continue;
                 float d2 = dist2(me, c);
                 if (d2 > s_reassignRange * s_reassignRange) continue;
                 int busy = attackersOn(c, me, now);
@@ -127,6 +141,29 @@ static Character* choose_hook(CombatClass* cc)
         wbLog(b);
     }
     return pick;
+}
+
+// Main thread, every frame: refresh the list of characters that really exist.
+void wbBattleFrame(bool worldLive)
+{
+    if (!s_ready) return;
+    ULONGLONG now = GetTickCount64();
+    std::vector<Character*> fresh;
+    if (worldLive)
+    {
+        if (now - s_liveAt < 250) return;
+        if (!ou) return;
+        const ogre_unordered_set<Character*>::type& all = ou->getCharacterUpdateList();
+        fresh.reserve(all.size());
+        for (ogre_unordered_set<Character*>::type::const_iterator it = all.begin(); it != all.end(); ++it)
+            if (*it) fresh.push_back(*it);
+        std::sort(fresh.begin(), fresh.end());
+    }
+    s_liveAt = now;
+    EnterCriticalSection(&s_lock);
+    s_live.swap(fresh);
+    if (!worldLive) s_engN = 0;                                  // a new world: forget every fight
+    LeaveCriticalSection(&s_lock);
 }
 
 // ------------------------------------------------------------ settings + install
@@ -176,5 +213,8 @@ void wbBattleInstall(const char* path)
     else if (KenshiLib::SUCCESS != KenshiLib::AddHook(fn, (void*)&choose_hook, &s_chooseOrig))
         ErrorLog("Warborn: chooseAttackTarget hook FAILED - fair battles off");
     else
+    {
+        s_ready = true;
         DebugLog("Warborn: chooseAttackTarget hook OK (fair battles)");
+    }
 }
